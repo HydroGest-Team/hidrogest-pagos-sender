@@ -87,7 +87,8 @@ docker compose stop third-api-mock     # el breaker del tercero se abre; banco y
 docker compose start third-api-mock    # al volver, lo pendiente se entrega
 
 # Pago que pasa a PAGADO después (el producer lo detecta por updated_at)
-docker/mariadb/simular-cobro.sh 900006
+docker/mariadb/nuevo-cobro.sh 75.00 Debito pendiente   # anota el id
+docker/mariadb/simular-cobro.sh <id>
 ```
 
 ## 6. Activar un destino nuevo sin reenviar el historial

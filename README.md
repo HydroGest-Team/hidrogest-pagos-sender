@@ -61,8 +61,19 @@ export ADMIN_PASSWORD=$(grep '^ADMIN_PASSWORD=' .env | cut -d= -f2-)
 curl -s -u admin:$ADMIN_PASSWORD http://localhost:8080/admin/pagos/900001 | jq
 ```
 
-Simular a HidroGest: `docker/mariadb/simular-cobro.sh 900006` (pago que pasa a PAGADO después) y
-`docker/mariadb/nuevo-cobro.sh 135.25 Debito` (cobro nuevo). Escenarios de fallo: ver el runbook.
+Simular a HidroGest: `docker/mariadb/nuevo-cobro.sh 135.25 Debito` (cobro nuevo; con `pendiente` al final
+queda NO PAGADO) y `docker/mariadb/simular-cobro.sh <id>` (cobrarlo después). Escenarios de fallo: ver el runbook.
+
+### Pruebas con interfaz gráfica
+
+Guía paso a paso: [`docs/PRUEBAS-GRAFICAS.md`](docs/PRUEBAS-GRAFICAS.md).
+
+| Interfaz | URL | Uso |
+|---|---|---|
+| Adminer | http://localhost:8081 | BD de HidroGest; registrar/cobrar pagos con las rutinas `simular_nuevo_cobro` y `simular_cobro_tardio` |
+| DynamoDB Admin | http://localhost:8001 | Estado por destino (`pagos_entregas`) y bitácora (`pagos_intentos`) |
+| RabbitMQ | http://localhost:15672 | Colas, reintentos en espera y dead-letter |
+| Postman | `docs/postman/` | Estado del pago y verificación directa en el banco y el ERP (24 asserts) |
 
 Para correr desde el IDE contra el compose: `docker compose up -d rabbitmq mariadb dynamodb-local third-api-mock`
 y `mvn spring-boot:run` con las variables de `.env` (los hosts por defecto son `localhost`).
