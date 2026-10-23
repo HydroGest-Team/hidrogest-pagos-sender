@@ -11,6 +11,8 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBIT_USER:?define RABBIT_USER en .env}
       RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:?define RABBIT_PASSWORD en .env}
+      # Permite que el usuario "guest" se conecte desde otro contenedor (solo entorno local).
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit loopback_users []"
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -62,7 +64,7 @@ services:
     volumes:
       - dynamodb-data:/home/dynamodblocal/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000 || exit 1"]
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8000' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
