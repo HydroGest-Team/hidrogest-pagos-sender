@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.vscode
+target
+docker
+docs
+.env
+.env.*
+*.md
