@@ -1,0 +1,527 @@
+{
+  "info": {
+    "name": "pagos-sender · Feature 3",
+    "_postman_id": "547fba44-4902-561d-89c9-205309fbe3a7",
+    "description": "Pruebas manuales del envío de pagos (banco y ERP reales del docente, tercero local).\n\n1. Importa también el entorno `pagos-sender-local.postman_environment.json` y completa los valores secretos (adminPassword y las API keys) desde tu `.env`; no los guardes en el repo.\n2. Pon en `pagoId` el id que te devolvió Adminer al registrar un cobro.\n3. Ejecuta primero **2. Estado de un pago** (guarda los comprobantes) y luego **3. Verificación directa**: las pruebas comparan que cada destino tenga el mismo comprobante que guardó el servicio.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "{{adminUser}}",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "{{adminPassword}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Llave de idempotencia estable: <prefijo><id con 6 dígitos>, p. ej. EQA-900001",
+          "const id = String(pm.variables.get('pagoId') || '');",
+          "pm.variables.set('llave', (pm.variables.get('llavePrefijo') || 'EQA-') + id.padStart(6, '0'));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Salud",
+      "item": [
+        {
+          "name": "Servicio (público)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Debe responder UP aunque un destino externo esté caído.",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Destinos y circuit breakers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"responde\", () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+                  "const c = pm.response.json().components || {};",
+                  "Object.keys(c).forEach(d => console.log(d, c[d].status, (c[d].details || {}).circuitBreaker));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Salud de banco, ERP y tercero y el estado de su circuit breaker (CLOSED / OPEN / HALF_OPEN).",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health/destinos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health",
+                "destinos"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Banco (simulador del docente)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "No requiere API key.",
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/health",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "health"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "ERP (simulador del docente)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"ARRIBA\", () => pm.expect(pm.response.json().estado).to.eql(\"ARRIBA\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "No requiere API key.",
+            "url": {
+              "raw": "{{erpBaseUrl}}/erp/v1/salud",
+              "host": [
+                "{{erpBaseUrl}}"
+              ],
+              "path": [
+                "erp",
+                "v1",
+                "salud"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Tercero (mock local)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Si detuviste el contenedor third-api-mock, aquí falla.",
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/health",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "health"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Estado de un pago",
+      "item": [
+        {
+          "name": "Estado del pago (pagoId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "d.destinos.forEach(x => {",
+                  "  const e = x.estado;",
+                  "  pm.collectionVariables.set(\"comprobante_\" + e.destino, e.receiptId || \"\");",
+                  "  console.log(e.destino, e.estado, \"intentos=\" + e.intentos, e.receiptId || \"\", e.lastErrorCode || \"\");",
+                  "  pm.test(e.destino + \": \" + e.estado, () => pm.expect(e.estado).to.be.oneOf([\"ENTREGADO\",\"PENDIENTE\",\"EN_VUELO\",\"REINTENTO\",\"DESCONOCIDO\",\"DEAD_LETTER\"]));",
+                  "});",
+                  "pm.test(\"completo (entregado a todos los destinos activos)\", () => pm.expect(d.completo).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Estado por destino, comprobantes y bitácora de intentos. Guarda los comprobantes para la carpeta 3.",
+            "url": {
+              "raw": "{{baseUrl}}/admin/pagos/{{pagoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "pagos",
+                "{{pagoId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leer HidroGest ahora (producer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "Ejecuta el producer sin esperar los 10 s. Devuelve cuántas entregas nuevas encoló.",
+            "url": {
+              "raw": "{{baseUrl}}/admin/producer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "producer"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reconciliar ahora",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "Reencola entregas vencidas y crea las que falten. No reintenta DEAD_LETTER.",
+            "url": {
+              "raw": "{{baseUrl}}/admin/reconciliar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "reconciliar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reencolar dead-letter (destino)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"202 reencolado o 409 no aplica\", () => pm.expect(pm.response.code).to.be.oneOf([202, 409]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "Solo para una entrega en DEAD_LETTER ya corregida: vuelve a PENDIENTE con la misma llave. 409 si no estaba en DEAD_LETTER.",
+            "url": {
+              "raw": "{{baseUrl}}/admin/pagos/{{pagoId}}/destinos/{{destino}}/reencolar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "pagos",
+                "{{pagoId}}",
+                "destinos",
+                "{{destino}}",
+                "reencolar"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Verificación directa en los destinos",
+      "description": "Consulta a cada sistema externo por la llave, SIN pasar por pagos-sender: prueba de que el pago llegó de verdad.",
+      "item": [
+        {
+          "name": "Banco: buscar el pago por llave",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"mismo comprobante que guardó el servicio\", () => pm.expect(b.receiptId).to.eql(pm.collectionVariables.get(\"comprobante_BANCO\")));",
+                  "console.log(b.receiptId, b.amount.valueInCents + \" centavos\", b.receivedAt);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bankApiKey}}",
+                "type": "text"
+              }
+            ],
+            "description": "GET real al simulador del banco con la API key del equipo.",
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/payments/{{llave}}",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "payments",
+                "{{llave}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "ERP: buscar el documento por llave",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const e = pm.response.json();",
+                  "pm.test(\"mismo comprobante que guardó el servicio\", () => pm.expect(e.numero_comprobante).to.eql(pm.collectionVariables.get(\"comprobante_ERP\")));",
+                  "console.log(e.numero_comprobante, \"total \" + e.total, e.numero_partida);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{erpApiKey}}",
+                "type": "text"
+              }
+            ],
+            "description": "GET real al simulador del ERP (documento_origen.numero = llave).",
+            "url": {
+              "raw": "{{erpBaseUrl}}/erp/v1/pagos/{{llave}}",
+              "host": [
+                "{{erpBaseUrl}}"
+              ],
+              "path": [
+                "erp",
+                "v1",
+                "pagos",
+                "{{llave}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Tercero: buscar el pago por llave",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test(\"mismo comprobante que guardó el servicio\", () => pm.expect(t.confirmationId).to.eql(pm.collectionVariables.get(\"comprobante_TERCERO\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{thirdApiKey}}",
+                "type": "text"
+              }
+            ],
+            "description": "GET al mock local de la tercera API.",
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments/{{llave}}",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments",
+                "{{llave}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Métricas",
+      "item": [
+        {
+          "name": "Métricas de negocio (Prometheus)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"expone métricas pagos_*\", () => pm.expect(pm.response.text()).to.include(\"pagos_completos_total\"));",
+                  "pm.response.text().split(\"\\n\").filter(l => l.startsWith(\"pagos_entregas_abiertas\") || l.startsWith(\"pagos_dlq\") || l.startsWith(\"pagos_completos\")).forEach(l => console.log(l));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Busca las líneas pagos_*: intentos por destino y resultado, entregas abiertas, DLQ, pagos completos.",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/prometheus",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "prometheus"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "comprobante_BANCO",
+      "value": ""
+    },
+    {
+      "key": "comprobante_ERP",
+      "value": ""
+    },
+    {
+      "key": "comprobante_TERCERO",
+      "value": ""
+    }
+  ]
+}
