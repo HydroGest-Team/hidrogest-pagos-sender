@@ -46,27 +46,26 @@ No hay Maven Wrapper (`mvnw`): se usa `mvn` del sistema (Maven 3.9+, JDK 17).
 mvn clean compile
 ls target/generated-sources/openapi/{banco,erp,tercero}
 
-# Pruebas (unitarias; surefire por defecto)
+# Pruebas unitarias (*Test, surefire)
 mvn test
 mvn test -Dtest=NombreDeLaClaseTest          # una sola clase
 mvn test -Dtest=NombreDeLaClaseTest#metodo   # un solo método
 
-# Build completo con pruebas (criterio de "terminado")
+# Integración (*IT, failsafe + Testcontainers: MariaDB y DynamoDB Local; requiere Docker)
+mvn -Dit.test=MariaDbPaymentSourceIT failsafe:integration-test
+
+# Build completo con unitarias + integración (criterio de "terminado")
 mvn clean verify
 
 # Empaquetar sin pruebas (lo que hace el Dockerfile)
 mvn clean package -DskipTests
-
-# Perfiles Maven definidos en pom.xml: dev (por defecto), prod, destino-caido
-mvn clean verify -Pdestino-caido
 ```
 
 ### Entorno local (Docker Compose)
 
 ```bash
 cp .env.example .env            # completar valores reales solo en .env
-docker compose up -d            # rabbitmq, mariadb (+ mariadb-init), dynamodb-local,
-                                # third-api-mock y pagos-sender
+docker compose up -d            # rabbitmq, mariadb, dynamodb-local, third-api-mock y pagos-sender
 docker compose ps
 docker compose logs -f pagos-sender
 docker compose down
@@ -80,25 +79,37 @@ Comprobaciones rápidas:
 ```bash
 curl -fsS http://localhost:8080/actuator/health
 curl -fsS http://localhost:8089/third/v1/health
+# Estado por destino de un pago (Basic Auth con ADMIN_PASSWORD de .env)
+curl -s -u admin:$ADMIN_PASSWORD http://localhost:8080/admin/pagos/900001
+# Simular a HidroGest (escribe con el usuario de la app, no con el de este servicio)
+docker/mariadb/simular-cobro.sh 900006
+docker/mariadb/nuevo-cobro.sh 135.25 Debito
+# Forzar escenarios en los simuladores
+BANK_SIM_SCENARIO=LOST_ACK ERP_SIM_SCENARIO=ERROR_503 docker compose up -d pagos-sender
 ```
+
+El Banco y el ERP son los simuladores reales del docente (AWS); no van en el compose.
 
 ## Estructura
 
 - Paquete base: `gt.edu.umg.desarrolloweb.pagos` (hexagonal: `domain/`,
   `application/`, `infrastructure/{mariadb,dynamodb,rabbit,destinos/{banco,erp,tercero},config}`).
 - Configuración: `src/main/resources/application.yml` (todo por variables de entorno).
-- Seed de MariaDB local: `docker/mariadb/init.sql`.
+- MariaDB local: `docker/mariadb/01-esquema-hidrogest.sql` (copiado de las migraciones de
+  Laravel; si HidroGest cambia su esquema, actualizar aquí) y `02-datos-semilla.sql` (fechas fijas,
+  pagos desde 900001: no cambiar datos de un pago ya enviado o los simuladores responden
+  `IDEMPOTENCY_KEY_REUSED`).
 - Mock de la tercera API: `docker/third-mock/mock_third_api.py`.
-- ADRs: `docs/adr/`.
-
-## Estado actual conocido (verificado el 2026-10-23)
-
-- `src/test/` está vacío: todavía no hay pruebas, así que `mvn test` no valida nada.
-- `docs/adr/` está vacío, aunque el README lista ADR-001 a ADR-006.
-- `.github/workflows/` está vacío, aunque el README menciona `ci.yml`.
-- El README documenta `docker compose --profile destino-caido`, pero
-  `docker-compose.yml` no define perfiles; `destino-caido` solo existe como perfil Maven.
+- ADRs: `docs/adr/` · Operación: `docs/RUNBOOK.md` · CI: `.github/workflows/ci.yml`.
 - `src/main/resources/db/migration/` existe vacío; no debe usarse contra HidroGest.
+
+## Gotchas
+
+- El `pom.xml` no hereda de `spring-boot-starter-parent`: versiones de plugins fijadas a mano y
+  `-parameters` activado en el compilador (sin él fallan `@PathVariable`/`@RequestParam`).
+- El BOM de Testcontainers va **antes** que el de Spring Boot: Docker Engine 29 exige API ≥ 1.44.
+- Los `*FeignConfig` no llevan `@Configuration` a propósito: si lo tuvieran, sus interceptores
+  (con la API key) se aplicarían a todos los clientes.
 
 ## Convenciones
 
