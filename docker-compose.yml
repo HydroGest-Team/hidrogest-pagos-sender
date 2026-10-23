@@ -45,6 +45,7 @@ services:
       - ./docker/mariadb/01-esquema-hidrogest.sql:/docker-entrypoint-initdb.d/01-esquema-hidrogest.sql:ro
       - ./docker/mariadb/02-datos-semilla.sql:/docker-entrypoint-initdb.d/02-datos-semilla.sql:ro
       - ./docker/mariadb/03-usuario-solo-lectura.sh:/docker-entrypoint-initdb.d/03-usuario-solo-lectura.sh:ro
+      - ./docker/mariadb/04-simulacion-cajera.sql:/docker-entrypoint-initdb.d/04-simulacion-cajera.sql:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -87,6 +88,36 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  # --- Interfaces gráficas para pruebas (solo entorno local) ---
+
+  # BD de HidroGest: ver tablas y simular a la cajera (Rutinas → simular_nuevo_cobro / simular_cobro_tardio).
+  # Entrar con el usuario hidrogest_app (HIDROGEST_APP_PASSWORD de .env), que representa a Laravel.
+  adminer:
+    image: adminer:5.4.2-standalone
+    container_name: pagos-adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: mariadb
+    ports:
+      - "8081:8080"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  # Estado de entregas (pagos_entregas), bitácora de intentos (pagos_intentos) y cursor (pagos_control).
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin:5.3.4
+    container_name: pagos-dynamodb-admin
+    environment:
+      DYNAMO_ENDPOINT: http://dynamodb-local:8000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    ports:
+      - "8001:8001"
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
 
   pagos-sender:
     build:
