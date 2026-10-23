@@ -1,47 +1,59 @@
+# Configuración de pagos-sender. Todo lo que cambia por entorno sale de variables de entorno
+# (.env en local). Los secretos (API keys, contraseñas) NUNCA van aquí.
 spring:
   application:
     name: pagos-sender
+  main:
+    banner-mode: off
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  jackson:
+    # Los DTO generados no omiten nulos: sin esto se enviarían "notes": null, etc.
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
   datasource:
     url: ${DB_URL:jdbc:mariadb://localhost:3306/hidrogest}
-    username: ${DB_USER:hidrogest}
+    username: ${DB_USER:pagos_ro}
     password: ${DB_PASSWORD:}
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
+      # Solo lectura: además el usuario de BD solo tiene SELECT.
+      read-only: true
+      maximum-pool-size: 5
+      minimum-idle: 1
       connection-timeout: 5000
-      idle-timeout: 300000
-      max-lifetime: 1200000
   rabbitmq:
     host: ${RABBIT_HOST:localhost}
     port: ${RABBIT_PORT:5672}
     username: ${RABBIT_USER:guest}
     password: ${RABBIT_PASSWORD:guest}
     virtual-host: ${RABBIT_VHOST:/}
-    connection-timeout: 10s
     publisher-confirm-type: correlated
     publisher-returns: true
+    template:
+      mandatory: true
     listener:
       simple:
         acknowledge-mode: manual
-        prefetch: 3
-        concurrency: 1
-        max-concurrency: 3
+        # Llamadas de hasta 3 s: pocos mensajes por consumer.
+        prefetch: 2
         default-requeue-rejected: false
+        # Sin reintentos del contenedor: los gobierna la cola de espera.
         retry:
-          enabled: true
-          initial-interval: 2s
-          multiplier: 2.0
-          max-attempts: 3
-          max-interval: 30s
-  main:
-    allow-bean-definition-overriding: true
+          enabled: false
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            logger-level: basic
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
   error:
     include-stacktrace: never
+    include-message: never
 
 management:
   endpoints:
@@ -51,121 +63,111 @@ management:
   endpoint:
     health:
       show-details: when_authorized
+      roles: ADMIN
       probes:
         enabled: true
-  health:
-    db:
-      enabled: true
-    rabbit:
-      enabled: true
-    dynamodb:
-      enabled: true
+      group:
+        # Solo dependencias propias: si un destino externo cae, el servicio sigue sano.
+        readiness:
+          include: readinessState,db,rabbit,dynamoDb
+        destinos:
+          include: destinos
+          show-details: when_authorized
+          roles: ADMIN
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 logging:
   level:
     root: INFO
-    gt.edu.umg.desarrolloweb.pagos: DEBUG
-    org.springframework.cloud.openfeign: DEBUG
-    org.springframework.amqp: DEBUG
+    gt.edu.umg.desarrolloweb.pagos: INFO
+    # BASIC: método, URL, estado y duración. Nunca headers (x-api-key) ni cuerpos.
+    gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos: DEBUG
     software.amazon.awssdk: WARN
   pattern:
-    correlation: "[%X{X-Correlation-Id:-}] "
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} ${LOG_LEVEL_PATTERN:-%5p} %m%n"
+    level: "%5p [corr=%X{correlationId:-}] [pago=%X{paymentId:-} %X{destino:-}]"
 
 pagos:
   team-code: ${TEAM_CODE:EQUIPO_A}
-  destinos:
-    activos: ${DESTINOS_ACTIVOS:BANCO,ERP,TERCERO}
-    tercero-desde: ${TERCERO_DESDE:}
+  # Vacío = derivado de team-code (EQUIPO_A → EQA-).
+  prefijo-llave: ${IDEMPOTENCY_KEY_PREFIX:}
+  zona-fecha-pago: ${ZONA_FECHA_PAGO:America/Guatemala}
+  # Lista separada por comas (también la usan los listeners para decidir si arrancan).
+  destinos-activos: ${DESTINOS_ACTIVOS:BANCO,ERP,TERCERO}
+  # Puesta al día de un destino nuevo: solo pagos con marca de tiempo >= este valor (hora de la BD).
+  # desde:
+  #   TERCERO: 2026-10-20T00:00:00
   producer:
     intervalo: ${PRODUCER_INTERVALO:10s}
     lote: ${PRODUCER_LOTE:200}
     traslape: ${PRODUCER_TRASLAPE:10m}
+  consumer:
+    concurrencia:
+      banco: ${CONSUMER_CONCURRENCIA_BANCO:2}
+      erp: ${CONSUMER_CONCURRENCIA_ERP:2}
+      tercero: ${CONSUMER_CONCURRENCIA_TERCERO:2}
   reintentos:
     max-intentos: ${MAX_INTENTOS:6}
     tiers: ${RETRY_TIERS:5s,30s,2m,10m}
   reconciliador:
-    intervalo: ${RECONCILIADOR_INTERVALO:2m}
+    intervalo: ${RECONCILIADOR_INTERVALO:1m}
     lease: ${RECONCILIADOR_LEASE:30s}
-    pendiente-sin-actividad: ${PENDIENTE_SIN_ACTIVIDAD:5m}
+    gracia: ${RECONCILIADOR_GRACIA:1m}
+    barrido: ${RECONCILIADOR_BARRIDO:10m}
+    lote: ${RECONCILIADOR_LOTE:500}
 
-banco:
-  base-url: ${BANK_BASE_URL:https://gdsi5lyj34.execute-api.us-east-1.amazonaws.com/prod}
-  api-key: ${BANK_API_KEY:}
-  simulation-scenario: ${BANK_SIM_SCENARIO:}
-  connect-timeout: 2000
-  read-timeout: 3000
-
-erp:
-  base-url: ${ERP_BASE_URL:${BANK_BASE_URL}}
-  api-key: ${ERP_API_KEY:}
-  simulation-scenario: ${ERP_SIM_SCENARIO:}
-  connect-timeout: 2000
-  read-timeout: 5000
-
-tercero:
-  base-url: ${THIRD_BASE_URL:http://localhost:8089}
-  api-key: ${THIRD_API_KEY:dev-key}
-  simulation-scenario: ${THIRD_SIM_SCENARIO:}
-  connect-timeout: 2000
-  read-timeout: 3000
+destinos:
+  banco:
+    base-url: ${BANK_BASE_URL}
+    api-key: ${BANK_API_KEY:}
+    simulation-scenario: ${BANK_SIM_SCENARIO:}
+    # Recomendados por el contrato: connect 2 s, read 3 s.
+    connect-timeout: 2s
+    read-timeout: 3s
+  erp:
+    base-url: ${ERP_BASE_URL:${BANK_BASE_URL}}
+    api-key: ${ERP_API_KEY:}
+    simulation-scenario: ${ERP_SIM_SCENARIO:}
+    connect-timeout: 2s
+    read-timeout: 3s
+  tercero:
+    base-url: ${THIRD_BASE_URL:http://localhost:8089}
+    api-key: ${THIRD_API_KEY:}
+    simulation-scenario: ${THIRD_SIM_SCENARIO:}
+    connect-timeout: 2s
+    read-timeout: 3s
 
 aws:
-  region: ${AWS_REGION:us-east-1}
-  dynamodb-endpoint: ${DYNAMO_ENDPOINT:http://localhost:8000}
+  dynamodb:
+    region: ${AWS_REGION:us-east-1}
+    # Vacío = AWS real (credenciales por la cadena estándar del SDK).
+    endpoint: ${DYNAMO_ENDPOINT:}
+    crear-tablas: ${DYNAMO_CREAR_TABLAS:false}
+    tabla-entregas: ${DYNAMO_TABLA_ENTREGAS:pagos_entregas}
+    tabla-intentos: ${DYNAMO_TABLA_INTENTOS:pagos_intentos}
+    tabla-control: ${DYNAMO_TABLA_CONTROL:pagos_control}
 
+admin:
+  usuario: ${ADMIN_USER:admin}
+  password: ${ADMIN_PASSWORD:}
+
+# Un breaker por destino. Abre con 50 % de fallos (5xx/timeouts) en las últimas 10 llamadas.
 resilience4j:
   circuitbreaker:
-    instances:
-      banco:
-        registerHealthIndicator: true
-        slidingWindowSize: 10
-        minimumNumberOfCalls: 5
-        permittedNumberOfCallsInHalfOpenState: 3
-        automaticTransitionFromOpenToHalfOpenEnabled: true
-        waitDurationInOpenState: 30s
-        failureRateThreshold: 50
-      erp:
-        registerHealthIndicator: true
-        slidingWindowSize: 10
-        minimumNumberOfCalls: 5
-        permittedNumberOfCallsInHalfOpenState: 3
-        automaticTransitionFromOpenToHalfOpenEnabled: true
-        waitDurationInOpenState: 30s
-        failureRateThreshold: 50
-      tercero:
-        registerHealthIndicator: true
-        slidingWindowSize: 10
-        minimumNumberOfCalls: 5
-        permittedNumberOfCallsInHalfOpenState: 3
-        automaticTransitionFromOpenToHalfOpenEnabled: true
-        waitDurationInOpenState: 30s
-        failureRateThreshold: 50
-  retry:
-    instances:
-      banco:
-        maxAttempts: 1
-        waitDuration: 0
-      erp:
-        maxAttempts: 1
-        waitDuration: 0
-      tercero:
-        maxAttempts: 1
-        waitDuration: 0
-
-feign:
-  client:
-    config:
+    configs:
       default:
-        connectTimeout: 2000
-        readTimeout: 3000
-        loggerLevel: BASIC
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
       banco:
-        connectTimeout: 2000
-        readTimeout: 3000
+        base-config: default
       erp:
-        connectTimeout: 2000
-        readTimeout: 5000
+        base-config: default
       tercero:
-        connectTimeout: 2000
-        readTimeout: 3000
+        base-config: default
