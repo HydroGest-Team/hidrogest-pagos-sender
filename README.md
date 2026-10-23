@@ -1,178 +1,102 @@
-# Pagos Sender - Microservicio de Envío de Pagos
+# pagos-sender · Feature 3: envío de pagos a sistemas externos
 
-Microservicio Spring Boot 3.5.x (JDK 17) para el envío de pagos cobrados de la base de datos HidroGest hacia 3 sistemas externos (Banco, ERP, Tercero) con arquitectura productor/consumidor sobre RabbitMQ, estado en DynamoDB y reconciliación automática.
+Microservicio **Spring Boot 3.5 (JDK 17)** que toma los pagos cobrados en **HidroGest** (MariaDB,
+solo lectura) y los entrega a **3 sistemas externos**: el **Banco** y el **ERP** (simuladores del
+docente en AWS) y una **tercera API** (contrato provisional). Usa productor/consumidor sobre
+**RabbitMQ**, guarda el estado por destino en **DynamoDB** y reenvía **solo a los destinos que faltan**.
+
+Contexto completo y plan: [`docs/CONTEXTO_Y_PLAN_FEATURE3_PAGOS.md`](docs/CONTEXTO_Y_PLAN_FEATURE3_PAGOS.md) ·
+Operación: [`docs/RUNBOOK.md`](docs/RUNBOOK.md) · Decisiones: [`docs/adr/`](docs/adr/)
 
 ## Arquitectura
 
 ```
-HidroGest (MariaDB, solo lectura)
-    │
-    ▼
-Producer (scheduler) ──► DynamoDB (estado PENDIENTE) ──► RabbitMQ (cola por destino)
-    │                                                                      │
-    ▼                                                                      ▼
-Reconciliador ◄────────────────── Consumer ◄──── FeignClient ────► APIs Externas
-    │                                                                      │
-    └──────────────────────────── DynamoDB (estado ENTREGADO/DEAD_LETTER) ┘
+ HidroGest (MariaDB, SOLO SELECT)
+        │  Producer (cada 10 s, cursor por updated_at + traslape)
+        ▼
+ DynamoDB pagos_entregas ── PENDIENTE por (pago, destino) ──► RabbitMQ pagos.exchange
+                                                               │
+                  ┌──────────────── pagos.banco / pagos.erp / pagos.tercero (quorum)
+                  ▼
+           Consumer por destino ──Feign──► Banco · ERP · Tercero
+            │  ▲      │
+            │  │      └─► DynamoDB: estado + bitácora pagos_intentos
+            │  └── pagos.<d>.retry.{5s,30s,2m,10m} (TTL)   ·   pagos.<d>.dlq
+            ▼
+ Reconciliador (cada 1 min + barrido cada 10 min): reencola solo lo vencido o faltante
 ```
 
-## Requisitos Previos
+- **Un mensaje por (pago, destino):** si el ERP cae, banco y tercero siguen.
+- **Llave estable** `EQA-000123` (prefijo derivado de `TEAM_CODE`): header `Idempotency-Key` en banco
+  y tercero; `documento_origen.numero` en el ERP. Nunca un UUID por intento.
+- **Tabla de decisión** común: `201`/`409 duplicado` → entregado · `400`/`403`/`422`/`409 reutilizado`
+  → dead-letter · `429`/`5xx` → reintento con `Retry-After` · timeout/`504` → **desconocido**: el
+  siguiente intento consulta (`GET`) antes de reenviar.
+- **Circuit breaker por destino**: con el destino caído no se gastan intentos.
+- Sin Lambdas, sin SQS, sin JPA, sin reintentos ocultos de Feign. DTO generados de los YAML
+  (sin interfaces de API); clientes Feign escritos a mano.
 
-- JDK 17
-- Maven 3.9+
-- Docker y Docker Compose
-- Variables de entorno configuradas (ver `.env.example`)
+Código (hexagonal) en `src/main/java/gt/edu/umg/desarrolloweb/pagos/`: `domain/` (modelo y puertos, sin
+Spring), `application/` (producer, consumer, reconciliador, clasificador), `infrastructure/`
+(`mariadb`, `dynamodb`, `rabbit`, `destinos/{banco,erp,tercero}`, `admin`, `config`, `scheduling`).
 
-## Configuración
+## Requisitos
 
-Copie `.env.example` a `.env` y complete los valores:
+JDK 17, Maven 3.9+, Docker con Docker Compose. Acceso a internet (Maven Central y el API Gateway del docente).
 
-```bash
-cp .env.example .env
-# Edite .env con sus valores reales
-```
-
-Variables críticas:
-- `BANK_API_KEY`: API key del banco (obligatoria)
-- `ERP_API_KEY`: API key del ERP (obligatoria)
-- `TEAM_CODE`: Código de equipo (default: EQUIPO_A, prefijo EQA-)
-
-## Ejecución Local
+## Puesta en marcha
 
 ```bash
-# Levantar toda la infraestructura
-docker compose up -d
-
-# Ver logs
+cp .env.example .env      # completar: API keys del equipo, BANK_BASE_URL/ERP_BASE_URL y contraseñas locales
+docker compose up -d      # RabbitMQ, MariaDB (esquema de HidroGest + semilla), DynamoDB Local, mock del tercero y el servicio
+docker compose ps         # todo "healthy"
 docker compose logs -f pagos-sender
-
-# Detener
-docker compose down
 ```
 
-### Perfil "Destino Caído" (para demo sin X-Simulation-Scenario)
+Al arrancar, el producer encola los pagos semilla `900001`–`900005` y los envía al banco y ERP
+**reales** y al mock del tercero. Para ver el resultado:
 
 ```bash
-docker compose --profile destino-caido up -d
+export ADMIN_PASSWORD=$(grep '^ADMIN_PASSWORD=' .env | cut -d= -f2-)
+curl -s -u admin:$ADMIN_PASSWORD http://localhost:8080/admin/pagos/900001 | jq
 ```
 
-Esto configura URLs inexistentes para demostrar reintentos, circuit breaker y DLQ.
+Simular a HidroGest: `docker/mariadb/simular-cobro.sh 900006` (pago que pasa a PAGADO después) y
+`docker/mariadb/nuevo-cobro.sh 135.25 Debito` (cobro nuevo). Escenarios de fallo: ver el runbook.
 
-## Endpoints
+Para correr desde el IDE contra el compose: `docker compose up -d rabbitmq mariadb dynamodb-local third-api-mock`
+y `mvn spring-boot:run` con las variables de `.env` (los hosts por defecto son `localhost`).
 
-- `GET /actuator/health` - Health check completo (BD, RabbitMQ, DynamoDB, APIs externas)
-- `GET /actuator/metrics` - Métricas Prometheus
-- `GET /actuator/prometheus` - Exportador Prometheus
-
-## Flujo de Trabajo
-
-### Producer
-1. Cada `PRODUCER_INTERVALO` (default 10s) consulta pagos `PAGADO` con `updated_at >= cursor - TRASLAPE`
-2. Para cada pago y destino activo, crea estado `PENDIENTE` en DynamoDB (put condicional)
-3. Si se crea, publica mensaje en RabbitMQ con `publisher confirms`
-4. Avanza cursor al máximo `updated_at` del lote
-
-### Consumer (por mensaje)
-1. Carga estado; si terminal (`ENTREGADO`/`DEAD_LETTER`) → ack y sale
-2. Reclama con lease (`EN_VUELO`); si falla → otro consumer lo tiene: ack
-3. Lee pago de MariaDB y valida localmente
-4. Si estado previo `DESCONOCIDO` → lookup por llave; si existe → `ENTREGADO`
-5. Envía vía gateway del destino → clasifica resultado (tabla de decisión)
-6. Registra intento en `pagos_intentos` y actualiza estado
-7. Ack del mensaje
-
-### Reconciliador
-- Cada `RECONCILIADOR_INTERVALO` (default 2m):
-  - Reencola estados con `nextAttemptAt` vencido
-  - Reencola `EN_VUELO` con lease vencido
-  - Detecta `PENDIENTE` sin actividad (caída put/publish)
-  - Barrido de consistencia: pagos `PAGADO` sin estado para destinos activos
-- `DEAD_LETTER` no se reintenta automáticamente (requiere acción manual)
-
-## Idempotencia
-
-- Llave estable: `EQA-000123` (prefijo derivado de `TEAM_CODE` + id pago 6 dígitos)
-- Misma llave en los 3 destinos (header `Idempotency-Key` en Banco/Tercero, `documento_origen.numero` en ERP)
-- Nunca UUID nuevo por reintento
-
-## Tabla de Decisión (Respuesta → Acción)
-
-| HTTP / Code | Resultado | Acción |
-|---|---|---|
-| 201 | DELIVERED | Guardar comprobante, estado ENTREGADO |
-| 409 DUPLICATE/DOCUMENTO_DUPLICADO | DELIVERED | Tratar como entregado, tomar comprobante original |
-| 409 REUSED/DOCUMENTO_REUTILIZADO | DEAD_LETTER | Bug productor: sin reintento |
-| 400, 403, 422 | DEAD_LETTER | Sin reintento |
-| 429, 500, 502, 503 | RETRY | Backoff + Retry-After |
-| 504, timeout, red error | UNKNOWN | Primero lookup (GET); si no existe → reintentar POST |
-
-## Pruebas
+## Build y pruebas
 
 ```bash
-# Tests unitarios e integración
-mvn test
-
-# Verificar DTOs generados
-mvn clean compile
-ls target/generated-sources/openapi/
+mvn clean verify     # compila, genera los DTO, 63 unitarias + 11 de integración (Testcontainers: MariaDB, DynamoDB Local)
+mvn test             # solo unitarias
+mvn -Dit.test=MariaDbPaymentSourceIT failsafe:integration-test   # una prueba de integración
 ```
 
-## Estructura del Proyecto
+## Variables principales (`.env`)
 
-```
-src/main/java/gt/edu/umg/desarrolloweb/pagos/
-├── domain/                    # Modelos, enums, puertos (hexagonal)
-├── application/               # Casos de uso: Dispatcher, Processor, Reconciliation
-├── infrastructure/
-│   ├── mariadb/               # JdbcTemplate (solo lectura)
-│   ├── dynamodb/              # Adaptadores estado/intentos/control
-│   ├── rabbit/                # Topología, publisher, listeners
-│   ├── destinos/
-│   │   ├── banco/             # DTOs, FeignClient, mapper, gateway
-│   │   ├── erp/               # DTOs, FeignClient, mapper, gateway
-│   │   └── tercero/           # DTOs, FeignClient, mapper, gateway
-│   └── config/                # Configuración, health, métricas, resilience
-└── PagosSenderApplication.java
-```
+| Variable | Uso |
+|---|---|
+| `TEAM_CODE` | `EQUIPO_A`…`EQUIPO_D`; debe coincidir con la API key |
+| `BANK_BASE_URL`, `BANK_API_KEY` | Simulador del banco (header `x-api-key`) |
+| `ERP_BASE_URL`, `ERP_API_KEY` | Simulador del ERP |
+| `THIRD_BASE_URL`, `THIRD_API_KEY` | Tercera API (en compose: el mock) |
+| `DESTINOS_ACTIVOS` | `BANCO,ERP,TERCERO` |
+| `*_SIM_SCENARIO` | `X-Simulation-Scenario` (vacío = no se envía) |
+| `DB_URL`, `DB_USER`, `DB_PASSWORD` | HidroGest; usuario **solo SELECT** |
+| `DYNAMO_ENDPOINT` | Vacío = AWS real; con valor = DynamoDB Local |
+| `ADMIN_USER`, `ADMIN_PASSWORD` | `/admin` y métricas (vacío = cerrado) |
 
-## Decisiones Documentadas (ADRs)
+Los demás (intervalos, tiers de reintento, concurrencia por destino) están en
+`src/main/resources/application.yml` con su variable de entorno.
 
-- **ADR-001**: RabbitMQ sobre SQS (requisito de clase)
-- **ADR-002**: Sin Lambdas; consumer escribe directamente en DynamoDB
-- **ADR-003**: DynamoDB para estado; HidroGest solo lectura sin JPA
-- **ADR-004**: Tablas DynamoDB creadas automáticamente en perfil `dev`
-- **ADR-005**: `periodo_fiscal` del ERP = mes del pago (cuándo se contabiliza)
-- **ADR-006**: Retry tiers no bloqueantes con colas TTL + DLX
+## Pendientes que dependen del docente
 
-## Runbook (Operaciones)
+- **D4** · Quién crea las tablas DynamoDB en AWS (hoy: DynamoDB Local, creación automática).
+- **D5** · `teamCode`: el banco y el ERP aceptaron `EQUIPO_A` con la llave configurada (201 el 2026-10-23).
+- **D7** · URL/llave propias del ERP: hoy usa el mismo API Gateway y la misma llave que el banco, y funciona.
+- **Tercera API real**: contrato provisional + mock ([ADR-0006](docs/adr/0006-tercera-api-provisional.md)).
 
-### DLQ
-```bash
-# Ver mensajes en DLQ
-docker exec pagos-rabbitmq rabbitmqadmin get queue=pagos.dlq
-
-# Reencolar manualmente tras corregir causa
-curl -X POST http://localhost:8080/admin/requeue-dlq \
-  -H "Content-Type: application/json" \
-  -d '{"paymentId": 123, "destino": "ERP}'
-```
-
-### Reconciliación Manual
-```bash
-# Verificar pagos pendientes
-curl http://localhost:8080/actuator/metrics/pagos.pending
-
-# Forzar reconciliación
-curl -X POST http://localhost:8080/admin/reconcile
-```
-
-## CI/CD
-
-GitHub Actions workflow (`.github/workflows/ci.yml`):
-- Build + test en cada push/PR
-- Verifica `mvn clean verify`
-- Publica imagen Docker en registry
-
-## Licencia
-
-Proyecto académico - Desarrollo Web 2026 (UMG Jutiapa)
+Proyecto académico · Desarrollo Web 2026 · UMG Jutiapa.
