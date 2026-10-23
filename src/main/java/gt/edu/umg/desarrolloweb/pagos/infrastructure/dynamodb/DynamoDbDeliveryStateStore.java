@@ -146,9 +146,11 @@ public class DynamoDbDeliveryStateStore implements DeliveryStateStore {
     }
 
     @Override
-    public boolean markDelivered(long paymentId, Destino destino, long expectedVersion, DeliveryResult result, Instant now) {
+    public boolean markDelivered(long paymentId, Destino destino, long expectedVersion, int intentos,
+                                 DeliveryResult result, Instant now) {
         UpdateBuilder u = withResult(new UpdateBuilder(), result, now)
                 .set("estado", Attr.s(EstadoEntrega.ENTREGADO.name()))
+                .set("intentos", Attr.n(intentos))
                 .set("receiptId", Attr.s(result.receiptId()))
                 .remove("openKey").remove("leaseUntil").remove("nextAttemptAt");
         return conditionalOnVersion(paymentId, destino, expectedVersion, u);
