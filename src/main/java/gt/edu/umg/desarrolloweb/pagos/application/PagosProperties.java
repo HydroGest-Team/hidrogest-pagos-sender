@@ -13,7 +13,6 @@ import org.springframework.validation.annotation.Validated;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -41,7 +40,7 @@ public record PagosProperties(
 ) {
     public PagosProperties {
         destinosActivos = List.copyOf(destinosActivos);
-        desde = desde == null ? Map.of() : Map.copyOf(new EnumMap<>(desde));
+        desde = desde == null ? Map.of() : Map.copyOf(desde);
     }
 
     public record Producer(

@@ -22,7 +22,7 @@ public final class ResponseClassifier {
         if (httpStatus == 409) {
             // Duplicado = el destino ya lo tiene. Cualquier otro 409 (llave reutilizada con
             // datos distintos) es un error nuestro: no se reintenta.
-            return DUPLICADO.contains(errorCode) ? Outcome.DELIVERED : Outcome.DEAD_LETTER;
+            return errorCode != null && DUPLICADO.contains(errorCode) ? Outcome.DELIVERED : Outcome.DEAD_LETTER;
         }
         if (httpStatus == 429 || httpStatus == 500 || httpStatus == 502 || httpStatus == 503) {
             return Outcome.RETRY;
