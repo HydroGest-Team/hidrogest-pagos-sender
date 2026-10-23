@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 set -a; source .env; set +a
-docker run --rm -i --network pagos-network -e MYSQL_PWD="$HIDROGEST_DB_PASSWORD" mariadb:11.4 \
+docker run --rm -i --network pagos-sender_default -e MYSQL_PWD="$HIDROGEST_DB_PASSWORD" mariadb:11.4 \
   mariadb -h hidrogest-tunnel -u "$HIDROGEST_DB_USER" "$HIDROGEST_DB_NAME" <<'SQL'
 SELECT VERSION() AS version, @@time_zone AS zona_bd, NOW() AS ahora_bd;
 SELECT table_name AS tabla, table_rows AS filas_aprox FROM information_schema.tables
