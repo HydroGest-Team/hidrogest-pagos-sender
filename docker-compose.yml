@@ -1,120 +1,131 @@
-version: '3.8'
+# Entorno local completo: RabbitMQ, MariaDB (réplica del esquema de HidroGest con datos semilla),
+# DynamoDB Local, mock de la tercera API y pagos-sender.
+# El Banco y el ERP NO van aquí: son los simuladores reales del docente en AWS.
+# Todas las credenciales salen de .env (ver .env.example).
+name: pagos-sender
 
 services:
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: pagos-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:?define RABBIT_USER en .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:?define RABBIT_PASSWORD en .env}
+      # Permite que el usuario "guest" se conecte desde otro contenedor (solo entorno local).
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit loopback_users []"
     ports:
       - "5672:5672"
       - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-      RABBITMQ_DEFAULT_VHOST: /
-      RABBITMQ_LOOPBACK_USERS: "none"
-    healthcheck:
-      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && rabbitmq-diagnostics -q check_port_listener 5672"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 45s
-    restart: unless-stopped
-
-  mariadb:
-    image: mariadb:11
-    container_name: pagos-mariadb
-    ports:
-      - "3306:3306"
-    environment:
-      MARIADB_DATABASE: hidrogest
-      MARIADB_USER: hidrogest
-      MARIADB_PASSWORD: hidrogest
-      MARIADB_ROOT_PASSWORD: root
     volumes:
-      - ./docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  mariadb-init:
-    image: mariadb:11
-    container_name: pagos-mariadb-init
-    depends_on:
-      mariadb:
-        condition: service_healthy
-    command: >
-      sh -c "
-        echo 'Waiting for MariaDB to be ready...' &&
-        sleep 10 &&
-        mariadb -h mariadb -u root -proot -e 'source /docker-entrypoint-initdb.d/init.sql' 2>&1 || true
-        echo 'Init script completed'
-      "
-    volumes:
-      - ./docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    restart: "no"
-
-  dynamodb-local:
-    image: amazon/dynamodb-local:2.5.0
-    container_name: pagos-dynamodb
-    ports:
-      - "8000:8000"
-    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8000' && exit 0 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-    restart: unless-stopped
-
-  third-api-mock:
-    build:
-      context: ./docker/third-mock
-      dockerfile: Dockerfile
-    container_name: pagos-third-mock
-    ports:
-      - "8089:8089"
-    environment:
-      THIRD_API_KEY: dev-key
-      THIRD_TEAM_CODE: EQUIPO_A
-      THIRD_DEFAULT_SCENARIO: SUCCESS
-      THIRD_ALLOW_SCENARIO_HEADER: "true"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8089/third/v1/health"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 10s
       retries: 10
       start_period: 30s
-    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: pagos-mariadb
+    environment:
+      MARIADB_DATABASE: hidrogest
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?define MARIADB_ROOT_PASSWORD en .env}
+      # Usuario con escritura: representa a la aplicación HidroGest (Laravel), no a este servicio.
+      MARIADB_USER: hidrogest_app
+      MARIADB_PASSWORD: ${HIDROGEST_APP_PASSWORD:?define HIDROGEST_APP_PASSWORD en .env}
+      # Usuario de solo lectura con el que se conecta pagos-sender.
+      PAGOS_RO_USER: ${DB_USER:?define DB_USER en .env}
+      PAGOS_RO_PASSWORD: ${DB_PASSWORD:?define DB_PASSWORD en .env}
+      TZ: UTC
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./docker/mariadb/01-esquema-hidrogest.sql:/docker-entrypoint-initdb.d/01-esquema-hidrogest.sql:ro
+      - ./docker/mariadb/02-datos-semilla.sql:/docker-entrypoint-initdb.d/02-datos-semilla.sql:ro
+      - ./docker/mariadb/03-usuario-solo-lectura.sh:/docker-entrypoint-initdb.d/03-usuario-solo-lectura.sh:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:2.5.2
+    container_name: pagos-dynamodb
+    # Persistente: el estado de envío sobrevive a reinicios (si se borrara, se reenviaría y
+    # los destinos responderían 409 duplicado, que se trata como entregado).
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data"
+    user: root
+    ports:
+      - "8000:8000"
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8000' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  third-api-mock:
+    build:
+      context: ./docker/third-mock
+    container_name: pagos-third-mock
+    environment:
+      THIRD_API_KEY: ${THIRD_API_KEY:?define THIRD_API_KEY en .env}
+      THIRD_TEAM_CODE: ${TEAM_CODE:?define TEAM_CODE en .env}
+      THIRD_DEFAULT_SCENARIO: ${THIRD_MOCK_DEFAULT_SCENARIO:-SUCCESS}
+      THIRD_ALLOW_SCENARIO_HEADER: "true"
+    ports:
+      - "8089:8089"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8089/third/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   pagos-sender:
     build:
       context: .
-      dockerfile: Dockerfile
     container_name: pagos-sender
-    ports:
-      - "8080:8080"
     env_file:
       - .env
+    # Dentro de la red de Docker los servicios se llaman por su nombre: esto prevalece sobre .env.
+    environment:
+      DB_URL: jdbc:mariadb://mariadb:3306/hidrogest
+      RABBIT_HOST: rabbitmq
+      DYNAMO_ENDPOINT: http://dynamodb-local:8000
+      DYNAMO_CREAR_TABLAS: "true"
+      THIRD_BASE_URL: http://third-api-mock:8089
+      # Escenarios de simulación: se pueden forzar al levantar, p. ej.
+      #   BANK_SIM_SCENARIO=LOST_ACK docker compose up -d pagos-sender
+      BANK_SIM_SCENARIO: ${BANK_SIM_SCENARIO:-}
+      ERP_SIM_SCENARIO: ${ERP_SIM_SCENARIO:-}
+      THIRD_SIM_SCENARIO: ${THIRD_SIM_SCENARIO:-}
+    ports:
+      - "8080:8080"
     depends_on:
       rabbitmq:
         condition: service_healthy
-      mariadb-init:
-        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
       dynamodb-local:
         condition: service_healthy
       third-api-mock:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health/liveness || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q UP"]
       interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 60s
+    restart: unless-stopped
 
-networks:
-  default:
-    name: pagos-network
+volumes:
+  rabbitmq-data:
+  mariadb-data:
+  dynamodb-data:

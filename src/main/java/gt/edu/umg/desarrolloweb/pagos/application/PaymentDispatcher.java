@@ -1,77 +1,68 @@
 package gt.edu.umg.desarrolloweb.pagos.application;
 
-import gt.edu.umg.desarrolloweb.pagos.domain.*;
-import gt.edu.umg.desarrolloweb.pagos.infrastructure.config.PagosProperties;
-import gt.edu.umg.desarrolloweb.pagos.infrastructure.dynamodb.DynamoDbAttemptLogAdapter;
-import org.slf4j.MDC;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import gt.edu.umg.desarrolloweb.pagos.domain.CursorStore;
+import gt.edu.umg.desarrolloweb.pagos.domain.Payment;
+import gt.edu.umg.desarrolloweb.pagos.domain.PaymentSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
-import java.time.Duration;
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
-@Component
+/**
+ * Producer: lee los pagos {@code PAGADO} cuya marca de tiempo avanzó desde la última corrida y
+ * encola los que falten. No usa un cursor por {@code id}: un pago viejo puede pasar a
+ * {@code PAGADO} después. Se relee un traslape para tolerar transacciones que confirman tarde.
+ */
+@Service
 public class PaymentDispatcher {
 
-    private final PaymentSource paymentSource;
-    private final DeliveryStateStore stateStore;
-    private final DeliveryPublisher publisher;
-    private final ControlPort controlPort;
-    private final AttemptLogPort attemptLog;
+    private static final Logger log = LoggerFactory.getLogger(PaymentDispatcher.class);
+    static final String CURSOR = "producer";
+    private static final LocalDateTime INICIO = LocalDateTime.of(2000, 1, 1, 0, 0);
+
+    private final PaymentSource payments;
+    private final CursorStore cursors;
+    private final DeliveryEnqueuer enqueuer;
     private final PagosProperties properties;
 
-    public PaymentDispatcher(PaymentSource paymentSource,
-                              DeliveryStateStore stateStore,
-                              DeliveryPublisher publisher,
-                              ControlPort controlPort,
-                              AttemptLogPort attemptLog,
-                              PagosProperties properties) {
-        this.paymentSource = paymentSource;
-        this.stateStore = stateStore;
-        this.publisher = publisher;
-        this.controlPort = controlPort;
-        this.attemptLog = attemptLog;
+    public PaymentDispatcher(PaymentSource payments, CursorStore cursors, DeliveryEnqueuer enqueuer,
+                             PagosProperties properties) {
+        this.payments = payments;
+        this.cursors = cursors;
+        this.enqueuer = enqueuer;
         this.properties = properties;
     }
 
-    @Scheduled(fixedDelayString = "${pagos.producer.intervalo:10000}")
-    @Transactional(readOnly = true)
-    public void dispatch() {
-        Instant cursor = controlPort.getCursor().orElse(Instant.EPOCH);
-        Instant since = cursor.minus(properties.getProducer().getTraslape());
-        
-        List<Payment> pagos = paymentSource.findElegiblesSince(since, properties.getProducer().getLote());
-        
-        for (Payment pago : pagos) {
-            for (String destinoStr : properties.getActivos()) {
-                Destino destino = Destino.valueOf(destinoStr);
-                String idempotencyKey = properties.prefijo() + String.format("%06d", pago.id());
-                
-                DeliveryState state = new DeliveryState();
-                state.setPaymentId(pago.id());
-                state.setDestino(destino.name());
-                state.setEstado(EstadoEntrega.PENDIENTE.name());
-                state.setIntentos(0);
-                state.setIdempotencyKey(idempotencyKey);
-                state.setNextAttemptAt(Instant.now());
-                
-                if (stateStore.createIfNotExists(state)) {
-                    MDC.put("X-Correlation-Id", UUID.randomUUID().toString());
-                    publisher.publish(new DeliveryMessage(pago.id(), destino.name(), 0, MDC.get("X-Correlation-Id"), idempotencyKey));
-                }
+    public int dispatch() {
+        LocalDateTime cursor = cursors.get(CURSOR).orElse(null);
+        LocalDateTime desde = cursor == null ? INICIO : cursor.minus(properties.producer().traslape());
+        int lote = properties.producer().lote();
+
+        PaymentSource.PageKey despues = null;
+        LocalDateTime maximo = cursor;
+        int encolados = 0;
+        List<Payment> pagina;
+        do {
+            pagina = payments.findPagadosDesde(desde, despues, lote);
+            if (pagina.isEmpty()) {
+                break;
             }
+            encolados += enqueuer.enqueueMissing(pagina);
+            Payment ultimo = pagina.get(pagina.size() - 1);
+            despues = new PaymentSource.PageKey(ultimo.marcaTiempo(), ultimo.id());
+            if (maximo == null || ultimo.marcaTiempo().isAfter(maximo)) {
+                maximo = ultimo.marcaTiempo();
+            }
+        } while (pagina.size() == lote);
+
+        if (maximo != null && !maximo.equals(cursor)) {
+            cursors.put(CURSOR, maximo);
         }
-        
-        if (!pagos.isEmpty()) {
-            Instant newCursor = pagos.stream()
-                .map(Payment::updatedAt)
-                .max(java.time.LocalDateTime::compareTo)
-                .map(ldt -> ldt.atZone(Payment.ZONA_HORARIA).toInstant())
-                .orElse(cursor);
-            controlPort.updateCursor(newCursor);
+        if (encolados > 0) {
+            log.info("Producer: {} entregas nuevas encoladas (cursor {})", encolados, maximo);
         }
+        return encolados;
     }
 }

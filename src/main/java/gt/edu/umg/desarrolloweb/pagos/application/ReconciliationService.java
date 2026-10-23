@@ -1,155 +1,103 @@
 package gt.edu.umg.desarrolloweb.pagos.application;
 
-import gt.edu.umg.desarrolloweb.pagos.domain.*;
-import gt.edu.umg.desarrolloweb.pagos.infrastructure.config.MetricsService;
-import gt.edu.umg.desarrolloweb.pagos.infrastructure.config.PagosProperties;
-import gt.edu.umg.desarrolloweb.pagos.infrastructure.dynamodb.DynamoDbAttemptLogAdapter;
-import org.slf4j.MDC;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
+import gt.edu.umg.desarrolloweb.pagos.domain.DeliveryMessage;
+import gt.edu.umg.desarrolloweb.pagos.domain.DeliveryPublisher;
+import gt.edu.umg.desarrolloweb.pagos.domain.DeliveryState;
+import gt.edu.umg.desarrolloweb.pagos.domain.DeliveryStateStore;
+import gt.edu.umg.desarrolloweb.pagos.domain.Payment;
+import gt.edu.umg.desarrolloweb.pagos.domain.PaymentSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
-import java.time.Duration;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
-@Component
+/**
+ * Reconciliador: reencola <b>solo</b> los destinos que faltan.
+ * <ul>
+ *   <li>{@link #requeueOverdue()}: estados abiertos cuyo próximo intento ya venció (mensaje perdido,
+ *       caída entre crear el estado y publicar, o lease vencido de un consumer que murió).</li>
+ *   <li>{@link #sweep()}: compara HidroGest contra DynamoDB y crea lo que falte para cada destino
+ *       activo; así también se pone al día un destino recién activado.</li>
+ * </ul>
+ * {@code DEAD_LETTER} no se reintenta solo: requiere acción manual ({@link DeliveryAdminService}).
+ */
+@Service
 public class ReconciliationService {
 
-    private final PaymentSource paymentSource;
-    private final DeliveryStateStore stateStore;
+    private static final Logger log = LoggerFactory.getLogger(ReconciliationService.class);
+    private static final LocalDateTime INICIO = LocalDateTime.of(2000, 1, 1, 0, 0);
+
+    private final DeliveryStateStore store;
     private final DeliveryPublisher publisher;
-    private final AttemptLogPort attemptLog;
-    private final Map<Destino, DestinationGateway> gateways;
+    private final PaymentSource payments;
+    private final DeliveryEnqueuer enqueuer;
+    private final DestinationRegistry destinations;
+    private final DeliveryMetrics metrics;
     private final PagosProperties properties;
-    private final MetricsService metricsService;
+    private final Clock clock;
 
-    public ReconciliationService(PaymentSource paymentSource,
-                                  DeliveryStateStore stateStore,
-                                  DeliveryPublisher publisher,
-                                  AttemptLogPort attemptLog,
-                                  List<DestinationGateway> gateways,
-                                  PagosProperties properties,
-                                  MetricsService metricsService) {
-        this.paymentSource = paymentSource;
-        this.stateStore = stateStore;
+    public ReconciliationService(DeliveryStateStore store, DeliveryPublisher publisher, PaymentSource payments,
+                                 DeliveryEnqueuer enqueuer, DestinationRegistry destinations,
+                                 DeliveryMetrics metrics, PagosProperties properties, Clock clock) {
+        this.store = store;
         this.publisher = publisher;
-        this.attemptLog = attemptLog;
-        this.gateways = Map.of(
-            Destino.BANCO, gateways.stream().filter(g -> g.destino() == Destino.BANCO).findFirst().orElseThrow(),
-            Destino.ERP, gateways.stream().filter(g -> g.destino() == Destino.ERP).findFirst().orElseThrow(),
-            Destino.TERCERO, gateways.stream().filter(g -> g.destino() == Destino.TERCERO).findFirst().orElseThrow()
-        );
+        this.payments = payments;
+        this.enqueuer = enqueuer;
+        this.destinations = destinations;
+        this.metrics = metrics;
         this.properties = properties;
-        this.metricsService = metricsService;
+        this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "${pagos.reconciliador.intervalo:120000}")
-    public void reconcile() {
-        Instant now = Instant.now();
-        
-        // 1. Reencolar estados abiertos con nextAttemptAt vencido
-        List<DeliveryState> paraReintentar = stateStore.findAbiertosConNextAttemptAntesDe(now);
-        for (DeliveryState state : paraReintentar) {
-            reenqueue(state);
-        }
-
-        // 2. Reencolar EN_VUELO con lease vencido
-        List<DeliveryState> enVueloVencidos = stateStore.findEnVueloConLeaseVencido(now);
-        for (DeliveryState state : enVueloVencidos) {
-            reenqueue(state);
-        }
-
-        // 3. Detectar PENDIENTE sin actividad (caída entre put y publish)
-        Instant pendienteDesde = now.minus(properties.getReconciliador().getPendienteSinActividad());
-        List<DeliveryState> pendientesInactivos = stateStore.findPendientesSinActividadDesde(pendienteDesde);
-        for (DeliveryState state : pendientesInactivos) {
-            reenqueue(state);
-        }
-
-        // 4. Barrido de consistencia: pagos PAGADO sin estado para destinos activos
-        for (String destinoStr : properties.getActivos()) {
-            Destino destino = Destino.valueOf(destinoStr);
-            Instant desde = properties.getTerceroDesde() != null && !properties.getTerceroDesde().isBlank()
-                ? java.time.Instant.parse(properties.getTerceroDesde())
-                : Instant.EPOCH;
-            
-            List<Long> pagosSinEstado = stateStore.findPagosSinEstadoParaDestino(destino.name(), desde);
-            for (Long paymentId : pagosSinEstado) {
-                Payment payment = paymentSource.findById(paymentId);
-                if (payment != null && payment.esElegible()) {
-                    String idempotencyKey = properties.prefijo() + String.format("%06d", payment.id());
-                    
-                    DeliveryState newState = new DeliveryState();
-                    newState.setPaymentId(payment.id());
-                    newState.setDestino(destino.name());
-                    newState.setEstado(EstadoEntrega.PENDIENTE.name());
-                    newState.setIntentos(0);
-                    newState.setIdempotencyKey(idempotencyKey);
-                    newState.setNextAttemptAt(Instant.now());
-                    
-                    if (stateStore.createIfNotExists(newState)) {
-                        MDC.put("X-Correlation-Id", UUID.randomUUID().toString());
-                        publisher.publish(new DeliveryMessage(payment.id(), destino.name(), 0, MDC.get("X-Correlation-Id"), idempotencyKey));
-                    }
-                }
+    public int requeueOverdue() {
+        Instant limite = clock.instant().minus(properties.reconciliador().gracia());
+        List<DeliveryState> vencidos = store.findOverdue(limite, properties.reconciliador().lote());
+        int reencolados = 0;
+        for (DeliveryState estado : vencidos) {
+            if (!destinations.activos().contains(estado.destino())) {
+                continue;
+            }
+            try {
+                publisher.publish(new DeliveryMessage(estado.paymentId(), estado.destino(), estado.intentos(),
+                        UUID.randomUUID().toString()));
+                reencolados++;
+            } catch (RuntimeException e) {
+                log.error("No se pudo reencolar pago {} → {}: {}", estado.paymentId(), estado.destino(), e.toString());
             }
         }
-
-        // Metrics: pending counts per destination
-        for (String destinoStr : properties.getActivos()) {
-            long count = stateStore.findPendientesSinActividadDesde(Instant.EPOCH).stream()
-                .filter(s -> destinoStr.equals(s.getDestino()))
-                .count();
-            metricsService.recordPendingCount(destinoStr, count);
+        if (reencolados > 0) {
+            log.info("Reconciliador: {} entregas vencidas reencoladas", reencolados);
         }
+        refreshMetrics();
+        return reencolados;
     }
 
-    private void reenqueue(DeliveryState state) {
-        MDC.put("X-Correlation-Id", UUID.randomUUID().toString());
-        publisher.publish(new DeliveryMessage(
-            state.getPaymentId(),
-            state.getDestino(),
-            state.getIntentos() + 1,
-            MDC.get("X-Correlation-Id"),
-            state.getIdempotencyKey()
-        ));
-    }
-
-    public void reenqueueDeadLetter(Long paymentId, String destino) {
-        Optional<DeliveryState> stateOpt = stateStore.findByPaymentIdAndDestino(paymentId, destino);
-        stateOpt.ifPresent(s -> {
-            if ("DEAD_LETTER".equals(s.getEstado())) {
-                // Resetear a PENDIENTE para reintento manual
-                DeliveryState newState = new DeliveryState();
-                newState.setPaymentId(s.getPaymentId());
-                newState.setDestino(s.getDestino());
-                newState.setEstado(EstadoEntrega.PENDIENTE.name());
-                newState.setIntentos(0);
-                newState.setIdempotencyKey(s.getIdempotencyKey());
-                newState.setNextAttemptAt(Instant.now());
-                newState.setLastHttpStatus(null);
-                newState.setLastErrorCode(null);
-                stateStore.createIfNotExists(newState);
-                
-                MDC.put("X-Correlation-Id", UUID.randomUUID().toString());
-                publisher.publish(new DeliveryMessage(s.getPaymentId(), s.getDestino(), 0, MDC.get("X-Correlation-Id"), s.getIdempotencyKey()));
+    public int sweep() {
+        int lote = properties.reconciliador().lote();
+        PaymentSource.PageKey despues = null;
+        int creados = 0;
+        List<Payment> pagina;
+        do {
+            pagina = payments.findPagadosDesde(INICIO, despues, lote);
+            if (pagina.isEmpty()) {
+                break;
             }
-        });
+            creados += enqueuer.enqueueMissing(pagina);
+            Payment ultimo = pagina.get(pagina.size() - 1);
+            despues = new PaymentSource.PageKey(ultimo.marcaTiempo(), ultimo.id());
+        } while (pagina.size() == lote);
+        if (creados > 0) {
+            log.info("Barrido de consistencia: {} entregas faltantes creadas y encoladas", creados);
+        }
+        return creados;
     }
 
-    public long countPendientes() {
-        // Simplified: would need proper query in production
-        return 0;
-    }
-
-    public boolean isPagoCompleto(Long paymentId) {
-        return properties.getActivos().stream()
-            .allMatch(destino -> {
-                Optional<DeliveryState> state = stateStore.findByPaymentIdAndDestino(paymentId, destino);
-                return state.isPresent() && state.get().isTerminal() && "ENTREGADO".equals(state.get().getEstado());
-            });
+    public void refreshMetrics() {
+        metrics.abiertos(store.countOpen());
     }
 }

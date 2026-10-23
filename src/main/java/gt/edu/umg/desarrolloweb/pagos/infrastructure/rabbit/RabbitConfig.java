@@ -1,44 +1,45 @@
 package gt.edu.umg.desarrolloweb.pagos.infrastructure.rabbit;
 
-import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
-import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import gt.edu.umg.desarrolloweb.pagos.domain.Destino;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.QueueInformation;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
-import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class RabbitConfig {
 
+    /** JSON con el ObjectMapper de Spring Boot; Boot lo usa en el RabbitTemplate y en los listeners. */
     @Bean
-    public MessageConverter messageConverter() {
-        return new Jackson2JsonMessageConverter();
+    public MessageConverter jsonMessageConverter(ObjectMapper objectMapper) {
+        return new Jackson2JsonMessageConverter(objectMapper);
     }
 
+    /** Mensajes en la DLQ de cada destino ({@code pagos.dlq.mensajes}). */
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, MessageConverter messageConverter) {
-        RabbitTemplate template = new RabbitTemplate(connectionFactory);
-        template.setMessageConverter(messageConverter);
-        template.setMandatory(true);
-        // publisher-confirm-type configured via spring.rabbitmq.template.publisher-confirm-type=correlated
-        return template;
+    public InitializingBean dlqGauges(MeterRegistry registry, AmqpAdmin admin) {
+        return () -> {
+            for (Destino destino : Destino.values()) {
+                Gauge.builder("pagos.dlq.mensajes", () -> depth(admin, RabbitTopology.dlq(destino)))
+                        .description("Mensajes en dead-letter pendientes de revisión")
+                        .tag("destino", destino.name())
+                        .register(registry);
+            }
+        };
     }
 
-    @Bean
-    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
-            SimpleRabbitListenerContainerFactoryConfigurer configurer,
-            ConnectionFactory connectionFactory,
-            MessageConverter messageConverter) {
-        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-        configurer.configure(factory, connectionFactory);
-        factory.setMessageConverter(messageConverter);
-        factory.setAcknowledgeMode(org.springframework.amqp.core.AcknowledgeMode.MANUAL);
-        factory.setPrefetchCount(3);
-        factory.setConcurrentConsumers(3);
-        factory.setMaxConcurrentConsumers(10);
-        factory.setDefaultRequeueRejected(false);
-        return factory;
+    private static double depth(AmqpAdmin admin, String queue) {
+        try {
+            QueueInformation info = admin.getQueueInfo(queue);
+            return info == null ? Double.NaN : info.getMessageCount();
+        } catch (RuntimeException e) {
+            return Double.NaN;
+        }
     }
 }

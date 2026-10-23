@@ -1,110 +1,93 @@
 package gt.edu.umg.desarrolloweb.pagos.infrastructure.mariadb;
 
+import gt.edu.umg.desarrolloweb.pagos.domain.MetodoPago;
 import gt.edu.umg.desarrolloweb.pagos.domain.Payment;
 import gt.edu.umg.desarrolloweb.pagos.domain.PaymentSource;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * Lectura de pagos en la BD de HidroGest. <b>Solo SELECT</b>: este servicio nunca escribe ni crea
+ * tablas en esa base. Camino: {@code tb_pagos → tb_lecturas → tb_contadores → tb_clientes} y
+ * {@code tb_lecturas → tb_periodos}. No se selecciona el DPI.
+ */
 @Repository
 public class MariaDbPaymentSource implements PaymentSource {
 
-    private static final String FIND_ELEGIBLES_SINCE = """
-        SELECT p.id, p.monto_pago, p.fecha_pago, p.metodo_pago, p.estado_pago,
-               p.lecturas_id, l.numero_recibo, l.usuario_id, l.periodo_id,
-               c.id as cliente_id, c.dpi_cliente,
-               CONCAT_WS(' ', c.nombre1_cliente, c.nombre2_cliente, c.nombre3_cliente,
-                         c.apellido1_cliente, c.apellido2_cliente, c.apellido3_cliente) as nombre_completo,
-               ct.codigo_contador,
-               per.fecha_apertura, per.fecha_cierre,
-               p.created_at, p.updated_at
-        FROM tb_pagos p
-        JOIN tb_lecturas l ON p.lecturas_id = l.id
-        JOIN tb_clientes c ON l.usuario_id = c.id
-        JOIN tb_contadores ct ON l.contador_id = ct.id
-        JOIN tb_periodos per ON l.periodo_id = per.id
-        WHERE p.estado_pago = 'PAGADO'
-          AND p.updated_at >= ?
-        ORDER BY p.updated_at, p.id
-        LIMIT ?
-        """;
+    /** Laravel deja {@code updated_at} en NULL si la fila se insertó fuera de Eloquent. */
+    private static final String MARCA = "COALESCE(p.updated_at, p.created_at, p.fecha_pago)";
 
-    private static final String FIND_BY_ID = """
-        SELECT p.id, p.monto_pago, p.fecha_pago, p.metodo_pago, p.estado_pago,
-               p.lecturas_id, l.numero_recibo, l.usuario_id, l.periodo_id,
-               c.id as cliente_id, c.dpi_cliente,
-               CONCAT_WS(' ', c.nombre1_cliente, c.nombre2_cliente, c.nombre3_cliente,
-                         c.apellido1_cliente, c.apellido2_cliente, c.apellido3_cliente) as nombre_completo,
-               ct.codigo_contador,
-               per.fecha_apertura, per.fecha_cierre,
-               p.created_at, p.updated_at
-        FROM tb_pagos p
-        JOIN tb_lecturas l ON p.lecturas_id = l.id
-        JOIN tb_clientes c ON l.usuario_id = c.id
-        JOIN tb_contadores ct ON l.contador_id = ct.id
-        JOIN tb_periodos per ON l.periodo_id = per.id
-        WHERE p.id = ?
-        """;
+    private static final String SELECT = """
+            SELECT p.id, p.monto_pago, p.fecha_pago, p.metodo_pago, p.estado_pago,
+                   l.numero_recibo, c.id AS cliente_id,
+                   CONCAT_WS(' ', c.nombre1_cliente, c.nombre2_cliente, c.nombre3_cliente,
+                             c.apellido1_cliente, c.apellido2_cliente, c.apellido3_cliente) AS nombre_cliente,
+                   ct.codigo_contador, per.fecha_apertura,
+                   %s AS marca_tiempo
+            FROM tb_pagos p
+            JOIN tb_lecturas l    ON l.id = p.lecturas_id
+            JOIN tb_contadores ct ON ct.id = l.contador_id
+            JOIN tb_clientes c    ON c.id = ct.cliente_id
+            JOIN tb_periodos per  ON per.id = l.periodo_id
+            """.formatted(MARCA);
 
-    private static final String FIND_MAX_UPDATED_AT = """
-        SELECT MAX(updated_at) FROM tb_pagos
-        """;
+    private static final String PAGADOS_DESDE = SELECT + """
+            WHERE p.estado_pago = 'PAGADO'
+              AND %1$s >= :desde
+            ORDER BY %1$s, p.id
+            LIMIT :limite
+            """.formatted(MARCA);
 
-    private final JdbcTemplate jdbcTemplate;
+    private static final String PAGADOS_DESPUES = SELECT + """
+            WHERE p.estado_pago = 'PAGADO'
+              AND %1$s >= :desde
+              AND (%1$s > :marca OR (%1$s = :marca AND p.id > :id))
+            ORDER BY %1$s, p.id
+            LIMIT :limite
+            """.formatted(MARCA);
 
-    public MariaDbPaymentSource(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    private static final String POR_ID = SELECT + "WHERE p.id = :id";
+
+    private static final RowMapper<Payment> MAPPER = (rs, n) -> new Payment(
+            rs.getLong("id"),
+            rs.getBigDecimal("monto_pago"),
+            rs.getObject("fecha_pago", LocalDateTime.class),
+            MetodoPago.desdeBd(rs.getString("metodo_pago")),
+            rs.getString("estado_pago"),
+            rs.getString("numero_recibo"),
+            rs.getLong("cliente_id"),
+            rs.getString("nombre_cliente"),
+            rs.getString("codigo_contador"),
+            YearMonth.from(rs.getObject("fecha_apertura", LocalDateTime.class)),
+            rs.getObject("marca_tiempo", LocalDateTime.class));
+
+    private final NamedParameterJdbcTemplate jdbc;
+
+    public MariaDbPaymentSource(NamedParameterJdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     @Override
-    public List<Payment> findElegiblesSince(java.time.Instant since, int limit) {
-        LocalDateTime sinceDateTime = LocalDateTime.ofInstant(since, Payment.ZONA_HORARIA);
-        return jdbcTemplate.query(FIND_ELEGIBLES_SINCE, paymentRowMapper(), sinceDateTime, limit);
+    public List<Payment> findPagadosDesde(LocalDateTime desde, PageKey despues, int limite) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("desde", desde)
+                .addValue("limite", limite);
+        if (despues == null) {
+            return jdbc.query(PAGADOS_DESDE, params, MAPPER);
+        }
+        params.addValue("marca", despues.marcaTiempo()).addValue("id", despues.id());
+        return jdbc.query(PAGADOS_DESPUES, params, MAPPER);
     }
 
     @Override
-    public Payment findById(Long id) {
-        return jdbcTemplate.queryForObject(FIND_BY_ID, paymentRowMapper(), id);
-    }
-
-    @Override
-    public java.time.Instant findMaxUpdatedAt() {
-        LocalDateTime max = jdbcTemplate.queryForObject(FIND_MAX_UPDATED_AT, LocalDateTime.class);
-        return max != null ? max.atZone(Payment.ZONA_HORARIA).toInstant() : java.time.Instant.EPOCH;
-    }
-
-    private RowMapper<Payment> paymentRowMapper() {
-        return (rs, rowNum) -> {
-            LocalDateTime fechaPago = rs.getTimestamp("fecha_pago").toLocalDateTime();
-            LocalDateTime createdAt = rs.getTimestamp("created_at").toLocalDateTime();
-            LocalDateTime updatedAt = rs.getTimestamp("updated_at").toLocalDateTime();
-            java.sql.Date fechaApertura = rs.getDate("fecha_apertura");
-            java.sql.Date fechaCierre = rs.getDate("fecha_cierre");
-            int anioPeriodo = fechaApertura != null ? fechaApertura.toLocalDate().getYear() : 0;
-            int mesPeriodo = fechaApertura != null ? fechaApertura.toLocalDate().getMonthValue() : 0;
-
-            return new Payment(
-                rs.getLong("id"),
-                rs.getBigDecimal("monto_pago"),
-                fechaPago,
-                rs.getString("metodo_pago"),
-                rs.getString("estado_pago"),
-                rs.getLong("lecturas_id"),
-                rs.getString("numero_recibo"),
-                rs.getLong("cliente_id"),
-                rs.getString("dpi_cliente"),
-                rs.getString("nombre_completo").trim(),
-                rs.getString("codigo_contador"),
-                anioPeriodo,
-                mesPeriodo,
-                rs.getLong("usuario_id"),
-                createdAt,
-                updatedAt
-            );
-        };
+    public Optional<Payment> findById(long id) {
+        return jdbc.query(POR_ID, new MapSqlParameterSource("id", id), MAPPER).stream().findFirst();
     }
 }

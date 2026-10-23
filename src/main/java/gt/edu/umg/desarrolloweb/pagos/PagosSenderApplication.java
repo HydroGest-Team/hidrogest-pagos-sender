@@ -5,9 +5,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+/** Feature 3: envío de pagos de HidroGest a Banco, ERP y Tercero vía RabbitMQ. */
 @SpringBootApplication
-@EnableFeignClients(basePackages = "gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos")
 @EnableScheduling
+@EnableFeignClients(basePackages = "gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos")
 public class PagosSenderApplication {
 
     public static void main(String[] args) {
