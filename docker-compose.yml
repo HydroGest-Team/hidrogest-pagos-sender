@@ -101,6 +101,11 @@ services:
       DYNAMO_ENDPOINT: http://dynamodb-local:8000
       DYNAMO_CREAR_TABLAS: "true"
       THIRD_BASE_URL: http://third-api-mock:8089
+      # Escenarios de simulación: se pueden forzar al levantar, p. ej.
+      #   BANK_SIM_SCENARIO=LOST_ACK docker compose up -d pagos-sender
+      BANK_SIM_SCENARIO: ${BANK_SIM_SCENARIO:-}
+      ERP_SIM_SCENARIO: ${ERP_SIM_SCENARIO:-}
+      THIRD_SIM_SCENARIO: ${THIRD_SIM_SCENARIO:-}
     ports:
       - "8080:8080"
     depends_on:
