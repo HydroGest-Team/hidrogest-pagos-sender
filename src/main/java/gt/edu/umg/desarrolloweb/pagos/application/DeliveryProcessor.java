@@ -123,7 +123,9 @@ public class DeliveryProcessor {
                 return cerrarComoEntregado(message, version, DeliveryResult.delivered(200, "ENCONTRADO_EN_CONSULTA", found.receiptId()));
             }
             if (consulta instanceof LookupResult.Failed failed) {
-                return reprogramar(message, previo, version, failed.result());
+                return failed.result().outcome() == Outcome.DEAD_LETTER
+                        ? cerrarComoDeadLetter(message, version, previo.intentos() + 1, failed.result())
+                        : reprogramar(message, previo, version, failed.result());
             }
             log.info("El destino no tiene el pago; se envía");
         }
