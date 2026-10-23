@@ -27,8 +27,10 @@ jobs:
           cache: maven
 
       # Unitarias + integración con Testcontainers (MariaDB y DynamoDB Local; Docker viene en el runner).
+      # Sin repackage: el jar ejecutable lo construye y valida el Dockerfile; así el CI también
+      # corre en ramas que aún no tienen la clase principal.
       - name: mvn clean verify
-        run: mvn -B clean verify
+        run: mvn -B clean verify -Dspring-boot.repackage.skip=true
 
       - name: Reportes de pruebas
         if: always()
