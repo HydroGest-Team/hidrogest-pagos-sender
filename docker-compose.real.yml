@@ -1,0 +1,30 @@
+# Modo REAL: lee la BD de HidroGest en la EC2 (por túnel SSH) y guarda el estado en DynamoDB de AWS.
+#   docker compose -f docker-compose.yml -f docker-compose.real.yml up -d
+# Requiere en .env: HIDROGEST_SSH_HOST, HIDROGEST_SSH_KEY, HIDROGEST_DB_USER, HIDROGEST_DB_PASSWORD,
+# AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (ver .env.example).
+services:
+  hidrogest-tunnel:
+    build:
+      context: ./docker/ssh-tunnel
+    container_name: pagos-hidrogest-tunnel
+    environment:
+      SSH_HOST: ${HIDROGEST_SSH_HOST:?define HIDROGEST_SSH_HOST en .env}
+      SSH_USER: ${HIDROGEST_SSH_USER:-ubuntu}
+      REMOTE_DB_PORT: ${HIDROGEST_DB_PORT:-3306}
+    volumes:
+      - ${HIDROGEST_SSH_KEY:?define HIDROGEST_SSH_KEY en .env}:/run/secrets/ssh_key:ro
+    restart: unless-stopped
+
+  pagos-sender:
+    environment:
+      # MySQL 8 con caching_sha2_password sin TLS (el tráfico va cifrado dentro del túnel SSH).
+      DB_URL: jdbc:mariadb://hidrogest-tunnel:3306/${HIDROGEST_DB_NAME:-hydrogest}?allowPublicKeyRetrieval=true
+      DB_USER: ${HIDROGEST_DB_USER:?define HIDROGEST_DB_USER en .env}
+      DB_PASSWORD: ${HIDROGEST_DB_PASSWORD:?define HIDROGEST_DB_PASSWORD en .env}
+      # Endpoint vacío = DynamoDB de AWS con AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY de .env.
+      DYNAMO_ENDPOINT: ""
+      DYNAMO_CREAR_TABLAS: "true"
+      AWS_REGION: ${AWS_DYNAMO_REGION:-us-east-2}
+    depends_on:
+      hidrogest-tunnel:
+        condition: service_healthy
