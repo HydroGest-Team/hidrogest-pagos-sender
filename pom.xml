@@ -15,10 +15,9 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <openapi-generator.version>7.12.0</openapi-generator.version>
         <testcontainers.version>1.20.6</testcontainers.version>
-        <wiremock.version>3.0.1</wiremock.version>
+        <wiremock.version>3.9.1</wiremock.version>
         <awaitility.version>4.2.1</awaitility.version>
         <resilience4j.version>2.2.0</resilience4j.version>
-        <micrometer.version>1.14.0</micrometer.version>
         <aws-java-sdk.version>2.25.60</aws-java-sdk.version>
     </properties>
     <dependencyManagement>
@@ -38,29 +37,22 @@
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
         <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-openfeign</artifactId></dependency>
         <dependency><groupId>org.mariadb.jdbc</groupId><artifactId>mariadb-java-client</artifactId></dependency>
-        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>dynamodb-enhanced</artifactId></dependency>
-        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>sts</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>dynamodb</artifactId></dependency>
         <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-spring-boot3</artifactId><version>${resilience4j.version}</version></dependency>
-        <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-retry</artifactId><version>${resilience4j.version}</version></dependency>
         <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-prometheus</artifactId></dependency>
-        <dependency><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><optional>true</optional></dependency>
-        <!-- Swagger annotations for generated DTOs -->
+        <!-- Anotaciones que usan los DTO generados por openapi-generator -->
         <dependency><groupId>io.swagger.core.v3</groupId><artifactId>swagger-annotations</artifactId><version>2.2.22</version></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
         <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers</artifactId><scope>test</scope></dependency>
         <dependency><groupId>org.testcontainers</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
         <dependency><groupId>org.testcontainers</groupId><artifactId>mariadb</artifactId><scope>test</scope></dependency>
-        <dependency><groupId>org.testcontainers</groupId><artifactId>rabbitmq</artifactId><scope>test</scope></dependency>
-        <dependency><groupId>org.testcontainers</groupId><artifactId>localstack</artifactId><scope>test</scope></dependency>
-        <dependency><groupId>com.github.tomakehurst</groupId><artifactId>wiremock-jre8-standalone</artifactId><version>${wiremock.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.wiremock</groupId><artifactId>wiremock-standalone</artifactId><version>${wiremock.version}</version><scope>test</scope></dependency>
         <dependency><groupId>org.awaitility</groupId><artifactId>awaitility</artifactId><version>${awaitility.version}</version><scope>test</scope></dependency>
-        <dependency><groupId>org.assertj</groupId><artifactId>assertj-core</artifactId><scope>test</scope></dependency>
-        <dependency><groupId>org.mockito</groupId><artifactId>mockito-junit-jupiter</artifactId><scope>test</scope></dependency>
     </dependencies>
     <build>
         <plugins>
-            <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId><version>${spring-boot.version}</version><configuration><excludes><exclude><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId></exclude></excludes></configuration><executions><execution><goals><goal>repackage</goal></goals></execution></executions></plugin>
-            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version><configuration><source>17</source><target>17</target><release>17</release><annotationProcessorPaths><path><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><version>${lombok.version}</version></path></annotationProcessorPaths></configuration></plugin>
+            <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId><version>${spring-boot.version}</version><executions><execution><goals><goal>repackage</goal></goals></execution></executions></plugin>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version><configuration><source>17</source><target>17</target><release>17</release></configuration></plugin>
             <plugin><groupId>org.openapitools</groupId><artifactId>openapi-generator-maven-plugin</artifactId><version>${openapi-generator.version}</version><executions>
                 <execution><id>generate-bank-dtos</id><goals><goal>generate</goal></goals><configuration><inputSpec>${project.basedir}/src/main/resources/openapi/bank-payments-api.yaml</inputSpec><generatorName>spring</generatorName><generateApis>false</generateApis><generateModels>true</generateModels><generateSupportingFiles>false</generateSupportingFiles><modelPackage>gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.banco.dto</modelPackage><modelNameSuffix>Dto</modelNameSuffix><configOptions><useSpringBoot3>true</useSpringBoot3><useBeanValidation>true</useBeanValidation><openApiNullable>false</openApiNullable><dateLibrary>java8</dateLibrary><java17>true</java17><interfaceOnly>false</interfaceOnly></configOptions><output>${project.build.directory}/generated-sources/openapi/banco</output></configuration></execution>
                 <execution><id>generate-erp-dtos</id><goals><goal>generate</goal></goals><configuration><inputSpec>${project.basedir}/src/main/resources/openapi/erp-payments-api.yaml</inputSpec><generatorName>spring</generatorName><generateApis>false</generateApis><generateModels>true</generateModels><generateSupportingFiles>false</generateSupportingFiles><modelPackage>gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.erp.dto</modelPackage><modelNameSuffix>Dto</modelNameSuffix><configOptions><useSpringBoot3>true</useSpringBoot3><useBeanValidation>true</useBeanValidation><openApiNullable>false</openApiNullable><dateLibrary>java8</dateLibrary><java17>true</java17><interfaceOnly>false</interfaceOnly></configOptions><output>${project.build.directory}/generated-sources/openapi/erp</output></configuration></execution>
@@ -69,9 +61,4 @@
             <plugin><groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.0</version><executions><execution><id>add-source</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals><configuration><sources><source>${project.build.directory}/generated-sources/openapi/banco</source><source>${project.build.directory}/generated-sources/openapi/erp</source><source>${project.build.directory}/generated-sources/openapi/tercero</source></sources></configuration></execution></executions></plugin>
         </plugins>
     </build>
-    <profiles>
-        <profile><id>dev</id><activation><activeByDefault>true</activeByDefault></activation><properties><dynamodb.endpoint>http://localhost:8000</dynamodb.endpoint></properties></profile>
-        <profile><id>prod</id><properties><dynamodb.endpoint></dynamodb.endpoint></properties></profile>
-        <profile><id>destino-caido</id><properties><bank.base-url>http://localhost:9999</bank.base-url><erp.base-url>http://localhost:9999</erp.base-url><third.base-url>http://localhost:9999</third.base-url></properties></profile>
-    </profiles>
 </project>
