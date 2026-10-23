@@ -23,7 +23,7 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers("/actuator/health", "/actuator/health/liveness",
-                            "/actuator/health/readiness", "/actuator/info").permitAll();
+                            "/actuator/health/readiness", "/actuator/info", "/error").permitAll();
                     if (admin.habilitado()) {
                         auth.requestMatchers("/actuator/**", "/admin/**").hasRole("ADMIN");
                     }
