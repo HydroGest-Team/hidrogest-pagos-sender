@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Contratos sin modificar (docs/ y src/main/resources/openapi/ idénticos)
+        run: |
+          for f in bank erp third; do
+            cmp docs/$f-payments-api.yaml src/main/resources/openapi/$f-payments-api.yaml
+          done
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      # Unitarias + integración con Testcontainers (MariaDB y DynamoDB Local; Docker viene en el runner).
+      - name: mvn clean verify
+        run: mvn -B clean verify
+
+      - name: Reportes de pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
