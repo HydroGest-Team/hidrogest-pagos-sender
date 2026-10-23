@@ -1,0 +1,171 @@
+spring:
+  application:
+    name: pagos-sender
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/hidrogest}
+    username: ${DB_USER:hidrogest}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USER:guest}
+    password: ${RABBIT_PASSWORD:guest}
+    virtual-host: ${RABBIT_VHOST:/}
+    connection-timeout: 10s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 3
+        concurrency: 1
+        max-concurrency: 3
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          initial-interval: 2s
+          multiplier: 2.0
+          max-attempts: 3
+          max-interval: 30s
+  main:
+    allow-bean-definition-overriding: true
+
+server:
+  port: 8080
+  error:
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+    rabbit:
+      enabled: true
+    dynamodb:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    gt.edu.umg.desarrolloweb.pagos: DEBUG
+    org.springframework.cloud.openfeign: DEBUG
+    org.springframework.amqp: DEBUG
+    software.amazon.awssdk: WARN
+  pattern:
+    correlation: "[%X{X-Correlation-Id:-}] "
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} ${LOG_LEVEL_PATTERN:-%5p} %m%n"
+
+pagos:
+  team-code: ${TEAM_CODE:EQUIPO_A}
+  destinos:
+    activos: ${DESTINOS_ACTIVOS:BANCO,ERP,TERCERO}
+    tercero-desde: ${TERCERO_DESDE:}
+  producer:
+    intervalo: ${PRODUCER_INTERVALO:10s}
+    lote: ${PRODUCER_LOTE:200}
+    traslape: ${PRODUCER_TRASLAPE:10m}
+  reintentos:
+    max-intentos: ${MAX_INTENTOS:6}
+    tiers: ${RETRY_TIERS:5s,30s,2m,10m}
+  reconciliador:
+    intervalo: ${RECONCILIADOR_INTERVALO:2m}
+    lease: ${RECONCILIADOR_LEASE:30s}
+    pendiente-sin-actividad: ${PENDIENTE_SIN_ACTIVIDAD:5m}
+
+banco:
+  base-url: ${BANK_BASE_URL:https://gdsi5lyj34.execute-api.us-east-1.amazonaws.com/prod}
+  api-key: ${BANK_API_KEY:}
+  simulation-scenario: ${BANK_SIM_SCENARIO:}
+  connect-timeout: 2000
+  read-timeout: 3000
+
+erp:
+  base-url: ${ERP_BASE_URL:${BANK_BASE_URL}}
+  api-key: ${ERP_API_KEY:}
+  simulation-scenario: ${ERP_SIM_SCENARIO:}
+  connect-timeout: 2000
+  read-timeout: 5000
+
+tercero:
+  base-url: ${THIRD_BASE_URL:http://localhost:8089}
+  api-key: ${THIRD_API_KEY:dev-key}
+  simulation-scenario: ${THIRD_SIM_SCENARIO:}
+  connect-timeout: 2000
+  read-timeout: 3000
+
+aws:
+  region: ${AWS_REGION:us-east-1}
+  dynamodb-endpoint: ${DYNAMO_ENDPOINT:http://localhost:8000}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      banco:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+      erp:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+      tercero:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+  retry:
+    instances:
+      banco:
+        maxAttempts: 1
+        waitDuration: 0
+      erp:
+        maxAttempts: 1
+        waitDuration: 0
+      tercero:
+        maxAttempts: 1
+        waitDuration: 0
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 2000
+        readTimeout: 3000
+        loggerLevel: BASIC
+      banco:
+        connectTimeout: 2000
+        readTimeout: 3000
+      erp:
+        connectTimeout: 2000
+        readTimeout: 5000
+      tercero:
+        connectTimeout: 2000
+        readTimeout: 3000

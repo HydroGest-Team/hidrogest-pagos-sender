@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: pagos-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_LOOPBACK_USERS: "none"
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && rabbitmq-diagnostics -q check_port_listener 5672"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11
+    container_name: pagos-mariadb
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_DATABASE: hidrogest
+      MARIADB_USER: hidrogest
+      MARIADB_PASSWORD: hidrogest
+      MARIADB_ROOT_PASSWORD: root
+    volumes:
+      - ./docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mariadb-init:
+    image: mariadb:11
+    container_name: pagos-mariadb-init
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for MariaDB to be ready...' &&
+        sleep 10 &&
+        mariadb -h mariadb -u root -proot -e 'source /docker-entrypoint-initdb.d/init.sql' 2>&1 || true
+        echo 'Init script completed'
+      "
+    volumes:
+      - ./docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: "no"
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:2.5.0
+    container_name: pagos-dynamodb
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8000' && exit 0 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  third-api-mock:
+    build:
+      context: ./docker/third-mock
+      dockerfile: Dockerfile
+    container_name: pagos-third-mock
+    ports:
+      - "8089:8089"
+    environment:
+      THIRD_API_KEY: dev-key
+      THIRD_TEAM_CODE: EQUIPO_A
+      THIRD_DEFAULT_SCENARIO: SUCCESS
+      THIRD_ALLOW_SCENARIO_HEADER: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8089/third/v1/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  pagos-sender:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pagos-sender
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mariadb-init:
+        condition: service_completed_successfully
+      dynamodb-local:
+        condition: service_healthy
+      third-api-mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health/liveness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+networks:
+  default:
+    name: pagos-network

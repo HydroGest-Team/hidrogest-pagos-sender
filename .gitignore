@@ -1,0 +1,44 @@
+# Build
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / Secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Docker
+docker-compose.override.yml
+
+# Generated sources (openapi-generator)
+target/generated-sources/
+
+# Logs
+logs/
+*.log
+
+# Test reports
+target/surefire-reports/
+target/failsafe-reports/
+
+# LocalStack / Testcontainers data
+.localstack/
+testcontainers/
+
+# Maven
+.mvn/timing.properties
