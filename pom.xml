@@ -59,6 +59,12 @@
                 <execution><id>generate-third-dtos</id><goals><goal>generate</goal></goals><configuration><inputSpec>${project.basedir}/src/main/resources/openapi/third-payments-api.yaml</inputSpec><generatorName>spring</generatorName><generateApis>false</generateApis><generateModels>true</generateModels><generateSupportingFiles>false</generateSupportingFiles><modelPackage>gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.tercero.dto</modelPackage><modelNameSuffix>Dto</modelNameSuffix><configOptions><useSpringBoot3>true</useSpringBoot3><useBeanValidation>true</useBeanValidation><openApiNullable>false</openApiNullable><dateLibrary>java8</dateLibrary><java17>true</java17><interfaceOnly>false</interfaceOnly></configOptions><output>${project.build.directory}/generated-sources/openapi/tercero</output></configuration></execution>
             </executions></plugin>
             <plugin><groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.0</version><executions><execution><id>add-source</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals><configuration><sources><source>${project.build.directory}/generated-sources/openapi/banco</source><source>${project.build.directory}/generated-sources/openapi/erp</source><source>${project.build.directory}/generated-sources/openapi/tercero</source></sources></configuration></execution></executions></plugin>
+            <!-- Pruebas unitarias (*Test) en "test" e integración con Testcontainers (*IT) en "verify". -->
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.2</version></plugin>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId><version>3.5.2</version>
+                <configuration><classesDirectory>${project.build.outputDirectory}</classesDirectory></configuration>
+                <executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions>
+            </plugin>
         </plugins>
     </build>
 </project>
