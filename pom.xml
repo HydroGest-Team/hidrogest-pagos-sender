@@ -14,7 +14,7 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <openapi-generator.version>7.12.0</openapi-generator.version>
-        <testcontainers.version>1.20.6</testcontainers.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
         <wiremock.version>3.9.1</wiremock.version>
         <awaitility.version>4.2.1</awaitility.version>
         <resilience4j.version>2.2.0</resilience4j.version>
@@ -22,9 +22,10 @@
     </properties>
     <dependencyManagement>
         <dependencies>
+            <!-- Antes que el BOM de Boot para que gane esta versión (compatible con Docker Engine 29, API >= 1.44) -->
+            <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers-bom</artifactId><version>${testcontainers.version}</version><type>pom</type><scope>import</scope></dependency>
             <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-dependencies</artifactId><version>${spring-boot.version}</version><type>pom</type><scope>import</scope></dependency>
             <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-dependencies</artifactId><version>${spring-cloud.version}</version><type>pom</type><scope>import</scope></dependency>
-            <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers-bom</artifactId><version>${testcontainers.version}</version><type>pom</type><scope>import</scope></dependency>
             <dependency><groupId>software.amazon.awssdk</groupId><artifactId>bom</artifactId><version>${aws-java-sdk.version}</version><type>pom</type><scope>import</scope></dependency>
         </dependencies>
     </dependencyManagement>
@@ -62,7 +63,7 @@
             <!-- Pruebas unitarias (*Test) en "test" e integración con Testcontainers (*IT) en "verify". -->
             <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.2</version></plugin>
             <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId><version>3.5.2</version>
-                <configuration><classesDirectory>${project.build.outputDirectory}</classesDirectory></configuration>
+                <configuration><classesDirectory>${project.build.outputDirectory}</classesDirectory><systemPropertyVariables><api.version>1.44</api.version></systemPropertyVariables></configuration>
                 <executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions>
             </plugin>
         </plugins>
