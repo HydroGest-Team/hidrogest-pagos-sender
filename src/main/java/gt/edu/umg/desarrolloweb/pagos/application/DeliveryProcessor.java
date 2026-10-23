@@ -120,7 +120,8 @@ public class DeliveryProcessor {
                     () -> gateway.lookup(previo.idempotencyKey()), DeliveryProcessorSupport::asResult);
             if (consulta instanceof LookupResult.Found found) {
                 log.info("El destino ya tenía el pago (comprobante {}); se marca ENTREGADO sin reenviar", found.receiptId());
-                return cerrarComoEntregado(message, version, DeliveryResult.delivered(200, "ENCONTRADO_EN_CONSULTA", found.receiptId()));
+                return cerrarComoEntregado(message, version, previo.intentos(),
+                        DeliveryResult.delivered(200, "ENCONTRADO_EN_CONSULTA", found.receiptId()));
             }
             if (consulta instanceof LookupResult.Failed failed) {
                 return failed.result().outcome() == Outcome.DEAD_LETTER
@@ -133,14 +134,15 @@ public class DeliveryProcessor {
         DeliveryResult resultado = timed(message, previo.intentos() + 1, "SEND",
                 () -> gateway.send(pago.get(), previo.idempotencyKey()), r -> r);
         return switch (resultado.outcome()) {
-            case DELIVERED -> cerrarComoEntregado(message, version, resultado);
+            case DELIVERED -> cerrarComoEntregado(message, version, previo.intentos() + 1, resultado);
             case DEAD_LETTER -> cerrarComoDeadLetter(message, version, previo.intentos() + 1, resultado);
             case RETRY, UNKNOWN -> reprogramar(message, previo, version, resultado);
         };
     }
 
-    private DeliveryDecision cerrarComoEntregado(DeliveryMessage message, long version, DeliveryResult resultado) {
-        if (!store.markDelivered(message.paymentId(), message.destino(), version, resultado, clock.instant())) {
+    private DeliveryDecision cerrarComoEntregado(DeliveryMessage message, long version, int intentos,
+                                                 DeliveryResult resultado) {
+        if (!store.markDelivered(message.paymentId(), message.destino(), version, intentos, resultado, clock.instant())) {
             log.warn("No se pudo cerrar como ENTREGADO: el estado cambió (versión {})", version);
             return DeliveryDecision.ACK;
         }

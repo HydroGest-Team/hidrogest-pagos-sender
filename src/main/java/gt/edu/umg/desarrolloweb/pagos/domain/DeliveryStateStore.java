@@ -29,7 +29,8 @@ public interface DeliveryStateStore {
      */
     Optional<DeliveryState> claim(long paymentId, Destino destino, Instant now, Instant leaseUntil);
 
-    boolean markDelivered(long paymentId, Destino destino, long expectedVersion, DeliveryResult result, Instant now);
+    boolean markDelivered(long paymentId, Destino destino, long expectedVersion, int intentos,
+                          DeliveryResult result, Instant now);
 
     /** Programa otro intento ({@code REINTENTO} o {@code DESCONOCIDO}). */
     boolean markRetry(long paymentId, Destino destino, long expectedVersion, EstadoEntrega estado,
