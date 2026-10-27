@@ -52,6 +52,7 @@ Causas típicas (columna `lastErrorCode`):
 | `VALIDACION_LOCAL` | El pago no cumple el contrato (monto > Q25,000, fecha futura, etc.) | Corregir el dato en HidroGest |
 | `403` sin código / `TEAM_MISMATCH` / `EQUIPO_NO_COINCIDE` | API key inválida o `TEAM_CODE` que no corresponde | Corregir `.env` y reiniciar |
 | `IDEMPOTENCY_KEY_REUSED` / `DOCUMENTO_REUTILIZADO` | La misma llave ya se usó con otros datos | Revisar si el pago cambió después de enviarse |
+| `LLAVE_REUTILIZADA` | El destino respondió "duplicado" (o el `GET` lo encontró) pero con **otro monto**: la llave es de otro pago (ADR-0007) | Pasa con réplicas de prueba que reutilizan ids. Reencolar no sirve: ver sección 7 |
 | `PERIODO_CERRADO` / `PERIODO_FUTURO` | Período de la lectura fuera de rango para el ERP | Revisar el período en HidroGest |
 | `500`/`503`… con "intentos agotados" | El destino estuvo caído más que los reintentos | Reencolar cuando vuelva |
 
@@ -97,3 +98,21 @@ docker/mariadb/simular-cobro.sh <id>
 2. Opcional: `pagos.desde.<DESTINO>` = marca de tiempo mínima (hora de la BD, UTC) de los pagos a enviar.
 3. Reiniciar. El barrido de consistencia (`RECONCILIADOR_BARRIDO`, 10 min) crea y encola solo las
    entregas que le faltan a ese destino.
+
+## 7. Empezar de cero tras limpiar los simuladores
+
+Las llaves (`EQA-<id>`) dependen del id del pago en HidroGest. La réplica local empieza en 900001;
+si se borra su volumen, los ids se repiten y los simuladores compartidos responden con pagos
+viejos (`LLAVE_REUTILIZADA`, o "entregado" si el monto coincide). Por eso **no** usar
+`docker compose down -v` mientras los simuladores conserven datos.
+
+Cuando el docente limpie los datos de los simuladores, reiniciar también el estado local para que
+ambos lados coincidan:
+
+```bash
+docker compose down -v      # borra MariaDB (réplica), DynamoDB Local y RabbitMQ
+docker compose up -d        # semilla 900001-900005 de nuevo: se envían a los 3 destinos
+```
+
+Sin ese reinicio, DynamoDB Local seguiría marcando como `ENTREGADO` pagos que los simuladores ya
+no tienen, y no se volverían a enviar.

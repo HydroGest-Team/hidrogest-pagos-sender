@@ -4,7 +4,9 @@ import gt.edu.umg.desarrolloweb.pagos.application.PagosProperties;
 import gt.edu.umg.desarrolloweb.pagos.domain.Destino;
 import gt.edu.umg.desarrolloweb.pagos.domain.Payment;
 import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.common.HttpDestinationGateway;
+import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.common.Montos;
 import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.tercero.dto.HealthStatusDto;
+import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.tercero.dto.ThirdReceiptDto;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.stereotype.Component;
 
@@ -27,8 +29,9 @@ public class TerceroGateway extends HttpDestinationGateway {
     }
 
     @Override
-    protected String doLookup(String idempotencyKey) {
-        return client.getThirdPayment(idempotencyKey).getConfirmationId();
+    protected Registro doLookup(String idempotencyKey) {
+        ThirdReceiptDto receipt = client.getThirdPayment(idempotencyKey);
+        return new Registro(receipt.getConfirmationId(), Montos.desdeTexto(receipt.getAmount()));
     }
 
     @Override

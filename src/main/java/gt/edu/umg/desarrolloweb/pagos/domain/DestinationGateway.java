@@ -11,7 +11,12 @@ public interface DestinationGateway {
 
     DeliveryResult send(Payment payment, String idempotencyKey);
 
-    LookupResult lookup(String idempotencyKey);
+    /**
+     * Consulta si el destino ya tiene el pago con esta llave. Solo devuelve {@code Found} si lo
+     * registrado coincide con {@code payment}; si la llave existe con otro monto, devuelve {@code Failed}
+     * con un resultado {@code DEAD_LETTER}.
+     */
+    LookupResult lookup(Payment payment, String idempotencyKey);
 
     boolean supportsLookup();
 

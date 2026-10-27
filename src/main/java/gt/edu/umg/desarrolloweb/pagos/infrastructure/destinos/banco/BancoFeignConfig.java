@@ -28,7 +28,8 @@ class BancoFeignConfig {
 
     @Bean
     ErrorDecoder bancoErrorDecoder(ObjectMapper mapper) {
-        return new ContractErrorDecoder(mapper, "code", "/originalReceipt/receiptId");
+        return new ContractErrorDecoder(mapper, "code", "/originalReceipt/receiptId",
+                "/originalReceipt/amount/valueInCents", true);
     }
 
     /** El reintento lo gobierna la cola, nunca Feign. */
