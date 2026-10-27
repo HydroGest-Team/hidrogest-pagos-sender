@@ -43,13 +43,13 @@ Para ver los datos: **tb_pagos → Seleccionar datos** (están el monto, el mét
 
 ## Prueba 1 · Flujo completo
 
-1. **Adminer:** `simular_nuevo_cobro(120.50, Efectivo, 1)` → anota el `pago_id` (ej. `900011`).
+1. **Adminer:** `simular_nuevo_cobro(120.50, Efectivo, 1)` → anota el `pago_id` (ej. `1793143394000`; cada instalación tiene su propio rango).
 2. Espera ~10 s.
 3. **DynamoDB Admin → pagos_entregas:** aparecen 3 filas con ese `paymentId` (BANCO, ERP, TERCERO)
    con `estado = ENTREGADO` y su `receiptId` (`BNK-…`, `ERP-…`, `THR-…`).
 4. **DynamoDB Admin → pagos_intentos:** una fila por llamada (`operacion = SEND`, `httpStatus = 201`,
    `duracionMs`).
-5. **Postman:** en el entorno pon `pagoId = 900011`. Ejecuta la carpeta **2. Estado de un pago →
+5. **Postman:** en el entorno pon `pagoId` = ese id. Ejecuta la carpeta **2. Estado de un pago →
    Estado del pago** y luego la carpeta **3. Verificación directa en los destinos**.
    Clic derecho en la colección → *Run* para ejecutar todo de una vez.
 

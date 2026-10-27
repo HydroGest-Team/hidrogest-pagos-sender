@@ -27,3 +27,15 @@ Una llave reutilizada con el **mismo** monto sigue pasando como entregada; con l
 HidroGest los ids no se reutilizan, así que solo puede ocurrir entre réplicas de prueba.
 Un `LLAVE_REUTILIZADA` no se resuelve reencolando: hay que limpiar los datos de prueba
 (ver RUNBOOK, "Empezar de cero").
+
+## Prevención en la réplica local
+Esta regla detecta el choque, pero la causa está en la réplica: los cobros simulados seguían a la
+semilla (900007, 900008…) y repetían ids al recrear el volumen o entre compañeros. Ahora
+`docker/mariadb/04-simulacion-cajera.sql` arranca el `AUTO_INCREMENT` de `tb_pagos` en
+`<segundos unix de la inicialización> × 1000`, un rango propio por instalación. Para que dos
+réplicas choquen tendrían que inicializarse en el mismo segundo, o una tendría que registrar más
+de 1000 cobros por cada segundo de diferencia entre ambas inicializaciones.
+
+Se descartó cambiar el formato de la llave (prefijo por desarrollador): la llave de producción
+debe seguir siendo `EQA-<id>`, estable y derivada del id real. Solo cambia la réplica: el servicio
+y la BD real de HidroGest no se tocan.
