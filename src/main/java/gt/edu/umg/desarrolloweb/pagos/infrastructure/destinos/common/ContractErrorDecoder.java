@@ -7,6 +7,7 @@ import feign.codec.ErrorDecoder;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
 
@@ -22,15 +23,22 @@ public class ContractErrorDecoder implements ErrorDecoder {
     private final ObjectMapper mapper;
     private final String codeField;
     private final String originalReceiptPointer;
+    private final String originalAmountPointer;
+    private final boolean amountInCents;
 
     /**
      * @param codeField              campo con el código: {@code code} o {@code codigo_error}
      * @param originalReceiptPointer JSON pointer al comprobante en un duplicado, p. ej. {@code /originalReceipt/receiptId}
+     * @param originalAmountPointer  JSON pointer al monto registrado en un duplicado
+     * @param amountInCents          {@code true} si ese monto viene en centavos (entero); si no, texto en quetzales
      */
-    public ContractErrorDecoder(ObjectMapper mapper, String codeField, String originalReceiptPointer) {
+    public ContractErrorDecoder(ObjectMapper mapper, String codeField, String originalReceiptPointer,
+                                String originalAmountPointer, boolean amountInCents) {
         this.mapper = mapper;
         this.codeField = codeField;
         this.originalReceiptPointer = originalReceiptPointer;
+        this.originalAmountPointer = originalAmountPointer;
+        this.amountInCents = amountInCents;
     }
 
     @Override
@@ -38,7 +46,11 @@ public class ContractErrorDecoder implements ErrorDecoder {
         JsonNode body = readBody(response);
         String code = text(body.path(codeField));
         String receipt = text(body.at(originalReceiptPointer));
-        return new DestinationHttpException(response.status(), code, receipt, retryAfter(response));
+        JsonNode monto = body.at(originalAmountPointer);
+        BigDecimal amount = amountInCents
+                ? Montos.desdeCentavos(monto.isIntegralNumber() ? monto.longValue() : null)
+                : Montos.desdeTexto(text(monto));
+        return new DestinationHttpException(response.status(), code, receipt, amount, retryAfter(response));
     }
 
     private JsonNode readBody(Response response) {

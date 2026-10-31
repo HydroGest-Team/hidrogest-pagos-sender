@@ -4,6 +4,8 @@ import gt.edu.umg.desarrolloweb.pagos.application.PagosProperties;
 import gt.edu.umg.desarrolloweb.pagos.domain.Destino;
 import gt.edu.umg.desarrolloweb.pagos.domain.Payment;
 import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.common.HttpDestinationGateway;
+import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.common.Montos;
+import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.erp.dto.ErpComprobanteDto;
 import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.erp.dto.ErpSaludDto;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.stereotype.Component;
@@ -27,8 +29,9 @@ public class ErpGateway extends HttpDestinationGateway {
     }
 
     @Override
-    protected String doLookup(String idempotencyKey) {
-        return client.consultarPagoErp(idempotencyKey).getNumeroComprobante();
+    protected Registro doLookup(String idempotencyKey) {
+        ErpComprobanteDto comprobante = client.consultarPagoErp(idempotencyKey);
+        return new Registro(comprobante.getNumeroComprobante(), Montos.desdeTexto(comprobante.getTotal()));
     }
 
     @Override

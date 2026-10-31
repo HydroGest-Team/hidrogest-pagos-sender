@@ -117,7 +117,7 @@ public class DeliveryProcessor {
         boolean incierto = previo.estado() == EstadoEntrega.DESCONOCIDO || previo.estado() == EstadoEntrega.EN_VUELO;
         if (incierto && gateway.supportsLookup()) {
             LookupResult consulta = timed(message, previo.intentos(), "LOOKUP",
-                    () -> gateway.lookup(previo.idempotencyKey()), DeliveryProcessorSupport::asResult);
+                    () -> gateway.lookup(pago.get(), previo.idempotencyKey()), DeliveryProcessorSupport::asResult);
             if (consulta instanceof LookupResult.Found found) {
                 log.info("El destino ya tenía el pago (comprobante {}); se marca ENTREGADO sin reenviar", found.receiptId());
                 return cerrarComoEntregado(message, version, previo.intentos(),

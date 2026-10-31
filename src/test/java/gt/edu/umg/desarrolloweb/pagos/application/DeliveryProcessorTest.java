@@ -107,6 +107,21 @@ class DeliveryProcessorTest {
     }
 
     @Test
+    void consultaQueEncuentraLaLlaveConOtroMontoVaADeadLetterSinReenviar() {
+        banco.sends.add(new DeliveryResult(Outcome.UNKNOWN, null, "TIMEOUT", null, null, null));
+        banco.lookups.add(new LookupResult.Failed(new DeliveryResult(Outcome.DEAD_LETTER, 200,
+                DeliveryResult.LLAVE_REUTILIZADA, null, null, "otro monto")));
+
+        procesar(Destino.BANCO);
+        clock.advance(Duration.ofSeconds(5));
+        DeliveryDecision decision = procesar(Destino.BANCO);
+
+        assertThat(decision).isInstanceOf(DeliveryDecision.DeadLetter.class);
+        assertThat(store.get(PAGO, Destino.BANCO).estado()).isEqualTo(EstadoEntrega.DEAD_LETTER);
+        assertThat(banco.sendKeys).hasSize(1);
+    }
+
+    @Test
     void error503RespetaRetryAfterYNoTocaLosOtrosDestinos() {
         erp.sends.add(new DeliveryResult(Outcome.RETRY, 503, "SERVICIO_NO_DISPONIBLE", null, Duration.ofSeconds(20), null));
 
@@ -262,7 +277,7 @@ class DeliveryProcessorTest {
         }
 
         @Override
-        public LookupResult lookup(String key) {
+        public LookupResult lookup(Payment payment, String key) {
             lookupCount++;
             return lookups.removeFirst();
         }

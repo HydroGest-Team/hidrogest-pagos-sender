@@ -72,7 +72,8 @@ docker compose down
 ```
 
 Puertos: app `8080`, RabbitMQ `5672` / management `15672`, MariaDB `3306`,
-DynamoDB Local `8000`, mock de la tercera API `8089`.
+DynamoDB Local `8000`, mock de la tercera API `8089`, Adminer `8081`, DynamoDB Admin `8001`.
+Guía de pruebas con interfaz: `docs/PRUEBAS-GRAFICAS.md`; colección Postman en `docs/postman/`.
 
 Comprobaciones rápidas:
 
@@ -82,8 +83,8 @@ curl -fsS http://localhost:8089/third/v1/health
 # Estado por destino de un pago (Basic Auth con ADMIN_PASSWORD de .env)
 curl -s -u admin:$ADMIN_PASSWORD http://localhost:8080/admin/pagos/900001
 # Simular a HidroGest (escribe con el usuario de la app, no con el de este servicio)
-docker/mariadb/simular-cobro.sh 900006
-docker/mariadb/nuevo-cobro.sh 135.25 Debito
+docker/mariadb/nuevo-cobro.sh 135.25 Debito [pendiente]
+docker/mariadb/simular-cobro.sh <id>
 # Forzar escenarios en los simuladores
 BANK_SIM_SCENARIO=LOST_ACK ERP_SIM_SCENARIO=ERROR_503 docker compose up -d pagos-sender
 ```
@@ -98,7 +99,9 @@ El Banco y el ERP son los simuladores reales del docente (AWS); no van en el com
 - MariaDB local: `docker/mariadb/01-esquema-hidrogest.sql` (copiado de las migraciones de
   Laravel; si HidroGest cambia su esquema, actualizar aquí) y `02-datos-semilla.sql` (fechas fijas,
   pagos desde 900001: no cambiar datos de un pago ya enviado o los simuladores responden
-  `IDEMPOTENCY_KEY_REUSED`).
+  `IDEMPOTENCY_KEY_REUSED`). Los cobros simulados (`04-simulacion-cajera.sql`) usan ids de un
+  rango propio por instalación (`segundos unix × 1000`) para no repetir llaves en los
+  simuladores compartidos (ADR-0007).
 - Mock de la tercera API: `docker/third-mock/mock_third_api.py`.
 - ADRs: `docs/adr/` · Operación: `docs/RUNBOOK.md` · CI: `.github/workflows/ci.yml`.
 - `src/main/resources/db/migration/` existe vacío; no debe usarse contra HidroGest.
