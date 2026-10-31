@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1172" height="760" viewBox="0 0 1172 760" font-family="Segoe UI, Helvetica, Arial, sans-serif" fill="#212121">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#37474f"/></marker></defs>
+<rect width="1172" height="760" fill="#ffffff"/>
+<text x="586" y="30" text-anchor="middle" font-size="20" font-weight="700">Oficina del Agua · HidroGest — Solución integrada Fase 2</text>
+<rect x="20" y="48" width="200" height="38" rx="8" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.6"/>
+<text x="120" y="71.55" text-anchor="middle" font-size="13">Usuario · navegador</text>
+<rect x="250" y="48" width="200" height="38" rx="8" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.6"/>
+<text x="350" y="71.55" text-anchor="middle" font-size="13">Ciudadano · navegador</text>
+<rect x="468" y="48" width="170" height="38" rx="8" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.6"/>
+<text x="553" y="71.55" text-anchor="middle" font-size="13">Cajera / admin · navegador</text>
+<rect x="676" y="48" width="300" height="38" rx="8" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.6"/>
+<text x="826" y="71.55" text-anchor="middle" font-size="13">Operador · Postman / curl (/admin)</text>
+<rect x="994" y="48" width="158" height="38" rx="8" fill="#ffffff" stroke="#9e9e9e" stroke-width="1.6"/>
+<text x="1073" y="71.55" text-anchor="middle" font-size="13">Operador · Swagger</text>
+<rect x="12" y="100" width="216" height="600" rx="12" fill="none" stroke="#7b1fa2" stroke-width="1.5" stroke-dasharray="8 5"/>
+<text x="22" y="120" font-size="14" font-weight="700" fill="#7b1fa2">F2 · Chatbot RAG</text>
+<rect x="242" y="100" width="216" height="380" rx="12" fill="none" stroke="#1565c0" stroke-width="1.5" stroke-dasharray="8 5"/>
+<text x="252" y="120" font-size="14" font-weight="700" fill="#1565c0">F1 · Consulta pública</text>
+<rect x="460" y="100" width="186" height="380" rx="12" fill="none" stroke="#455a64" stroke-width="1.5" stroke-dasharray="8 5"/>
+<text x="470" y="120" font-size="14" font-weight="700" fill="#455a64">Monolito heredado</text>
+<rect x="668" y="100" width="316" height="380" rx="12" fill="none" stroke="#2e7d32" stroke-width="3" stroke-dasharray="0"/>
+<text x="678" y="120" font-size="14" font-weight="700" fill="#2e7d32">F3 · Envío de pagos (este repo)</text>
+<rect x="986" y="100" width="174" height="380" rx="12" fill="none" stroke="#e65100" stroke-width="1.5" stroke-dasharray="8 5"/>
+<text x="996" y="120" font-size="14" font-weight="700" fill="#e65100">F4 · Replicación NoSQL</text>
+<rect x="20" y="130" width="200" height="62" rx="8" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.6"/>
+<text x="120" y="148.55" text-anchor="middle" font-size="13" font-weight="700">Next.js + BFF</text>
+<text x="120" y="165.55" text-anchor="middle" font-size="13">/api/chat</text>
+<text x="120" y="182.55" text-anchor="middle" font-size="13">(guarda la API key)</text>
+<rect x="20" y="236" width="200" height="62" rx="8" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.6"/>
+<text x="120" y="254.55" text-anchor="middle" font-size="13" font-weight="700">chatbot-service</text>
+<text x="120" y="271.55" text-anchor="middle" font-size="13">Spring Boot · RAG</text>
+<text x="120" y="288.55" text-anchor="middle" font-size="13">rate limit por sesión/IP</text>
+<rect x="54" y="336" width="166" height="50" rx="8" fill="#fffde7" stroke="#b28704" stroke-width="1.6"/>
+<text x="137" y="357.05" text-anchor="middle" font-size="13">PostgreSQL + pgvector</text>
+<text x="137" y="374.05" text-anchor="middle" font-size="13">(chunks + embeddings)</text>
+<rect x="54" y="404" width="166" height="50" rx="8" fill="#fffde7" stroke="#b28704" stroke-width="1.6"/>
+<text x="137" y="425.05" text-anchor="middle" font-size="13">DynamoDB</text>
+<text x="137" y="442.05" text-anchor="middle" font-size="13">(conversaciones)</text>
+<rect x="54" y="472" width="166" height="50" rx="8" fill="#fafafa" stroke="#757575" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="137" y="493.05" text-anchor="middle" font-size="13">Google Gemini API</text>
+<text x="137" y="510.05" text-anchor="middle" font-size="13">embeddings + respuesta</text>
+<rect x="54" y="540" width="166" height="50" rx="8" fill="#fafafa" stroke="#757575" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="137" y="561.05" text-anchor="middle" font-size="13">conocimiento/*.md</text>
+<text x="137" y="578.05" text-anchor="middle" font-size="13">fuente de la ingesta</text>
+<path d="M34 298 L34 565" fill="none" stroke="#37474f" stroke-width="1.8"/>
+<path d="M34 361 L54 361" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M34 429 L54 429" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M34 497 L54 497" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M34 565 L54 565" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M120 86 L120 130" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M120 192 L120 236" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="126" y="218" text-anchor="start" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">HTTP + X-API-Key</text>
+<rect x="250" y="130" width="200" height="62" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.6"/>
+<text x="350" y="148.55" text-anchor="middle" font-size="13" font-weight="700">Next.js web-publica</text>
+<text x="350" y="165.55" text-anchor="middle" font-size="13">BFF /api/consulta</text>
+<text x="350" y="182.55" text-anchor="middle" font-size="13">verifica el captcha</text>
+<rect x="250" y="236" width="200" height="76" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.6"/>
+<text x="350" y="253.05" text-anchor="middle" font-size="13" font-weight="700">consulta-service</text>
+<text x="350" y="270.05" text-anchor="middle" font-size="13">Spring Boot · JPA</text>
+<text x="350" y="287.05" text-anchor="middle" font-size="13">enmascara datos</text>
+<text x="350" y="304.05" text-anchor="middle" font-size="13">rate limit 10/min</text>
+<rect x="250" y="372" width="118" height="50" rx="8" fill="#fafafa" stroke="#757575" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="309" y="393.05" text-anchor="middle" font-size="13">Google</text>
+<text x="309" y="410.05" text-anchor="middle" font-size="13">reCAPTCHA</text>
+<path d="M350 86 L350 130" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M350 192 L350 236" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="356" y="218" text-anchor="start" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">HTTP</text>
+<path d="M250 161 L236 161 L236 397 L250 397" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="254" y="362" text-anchor="start" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">siteverify</text>
+<rect x="468" y="130" width="170" height="96" rx="8" fill="#eceff1" stroke="#455a64" stroke-width="1.6"/>
+<text x="553" y="148.55" text-anchor="middle" font-size="13" font-weight="700">HidroGest</text>
+<text x="553" y="165.55" text-anchor="middle" font-size="13">Laravel 11 · PHP 8.2</text>
+<text x="553" y="182.55" text-anchor="middle" font-size="13">Bootstrap 5 · Breeze</text>
+<text x="553" y="199.55" text-anchor="middle" font-size="13">AWS EC2</text>
+<text x="553" y="216.55" text-anchor="middle" font-size="13">NO se modifica</text>
+<rect x="676" y="130" width="300" height="92" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2.4"/>
+<text x="826" y="155.05" text-anchor="middle" font-size="13" font-weight="700">pagos-sender · Spring Boot 3.5 · JDK 17</text>
+<text x="826" y="172.05" text-anchor="middle" font-size="13">Producer (cada 10 s) · Consumer por destino</text>
+<text x="826" y="189.05" text-anchor="middle" font-size="13">Reconciliador · Feign + circuit breaker</text>
+<text x="826" y="206.05" text-anchor="middle" font-size="13">Basic Auth en /admin y métricas</text>
+<rect x="676" y="262" width="140" height="62" rx="8" fill="#fffde7" stroke="#b28704" stroke-width="1.6"/>
+<text x="746" y="280.55" text-anchor="middle" font-size="13">RabbitMQ</text>
+<text x="746" y="297.55" text-anchor="middle" font-size="13">cola por destino</text>
+<text x="746" y="314.55" text-anchor="middle" font-size="13">reintentos TTL + DLQ</text>
+<rect x="836" y="262" width="140" height="62" rx="8" fill="#fffde7" stroke="#b28704" stroke-width="1.6"/>
+<text x="906" y="280.55" text-anchor="middle" font-size="13">DynamoDB</text>
+<text x="906" y="297.55" text-anchor="middle" font-size="13">estado por destino</text>
+<text x="906" y="314.55" text-anchor="middle" font-size="13">+ bitácora intentos</text>
+<path d="M726 222 L726 262" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)" marker-start="url(#a)"/>
+<text x="732" y="246" text-anchor="start" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">AMQP</text>
+<path d="M926 222 L926 262" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)" marker-start="url(#a)"/>
+<text x="932" y="246" text-anchor="start" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">SDK v2</text>
+<path d="M826 222 L826 352 M724 352 L928 352" fill="none" stroke="#2e7d32" stroke-width="2"/>
+<text x="826" y="345" text-anchor="middle" font-size="11.5" fill="#1b5e20" paint-order="stroke" stroke="#ffffff" stroke-width="4">HTTPS · x-api-key · Idempotency-Key</text>
+<rect x="676" y="384" width="96" height="66" rx="8" fill="#fafafa" stroke="#757575" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="724" y="405.2" text-anchor="middle" font-size="12" font-weight="700">Banco</text>
+<text x="724" y="421.2" text-anchor="middle" font-size="12">simulador AWS</text>
+<text x="724" y="437.2" text-anchor="middle" font-size="12">(docente)</text>
+<path d="M724 352 L724 384" fill="none" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="778" y="384" width="96" height="66" rx="8" fill="#fafafa" stroke="#757575" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="826" y="405.2" text-anchor="middle" font-size="12" font-weight="700">ERP</text>
+<text x="826" y="421.2" text-anchor="middle" font-size="12">simulador AWS</text>
+<text x="826" y="437.2" text-anchor="middle" font-size="12">(docente)</text>
+<path d="M826 352 L826 384" fill="none" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="880" y="384" width="96" height="66" rx="8" fill="#fafafa" stroke="#757575" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="928" y="405.2" text-anchor="middle" font-size="12" font-weight="700">Tercera API</text>
+<text x="928" y="421.2" text-anchor="middle" font-size="12">provisional</text>
+<text x="928" y="437.2" text-anchor="middle" font-size="12">(mock local)</text>
+<path d="M928 352 L928 384" fill="none" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M906 86 L906 130" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="994" y="130" width="158" height="92" rx="8" fill="#fff3e0" stroke="#e65100" stroke-width="1.6"/>
+<text x="1073" y="146.55" text-anchor="middle" font-size="13" font-weight="700">sync-service</text>
+<text x="1073" y="163.55" text-anchor="middle" font-size="13">Spring Boot</text>
+<text x="1073" y="180.55" text-anchor="middle" font-size="13">POST /sync (async)</text>
+<text x="1073" y="197.55" text-anchor="middle" font-size="13">solo diferencias,</text>
+<text x="1073" y="214.55" text-anchor="middle" font-size="13">nunca borra</text>
+<rect x="994" y="300" width="132" height="62" rx="8" fill="#fffde7" stroke="#b28704" stroke-width="1.6"/>
+<text x="1060" y="318.55" text-anchor="middle" font-size="13">MongoDB 7</text>
+<text x="1060" y="335.55" text-anchor="middle" font-size="13">hidrogest_replica</text>
+<text x="1060" y="352.55" text-anchor="middle" font-size="13">(upsert)</text>
+<path d="M1073 86 L1073 130" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M1044 222 L1044 300" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="1050" y="266" text-anchor="start" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">escribe</text>
+<rect x="242" y="530" width="918" height="70" rx="10" fill="#fff8e1" stroke="#b28704" stroke-width="2.2"/>
+<text x="701" y="560" text-anchor="middle" font-size="16" font-weight="700">MariaDB · base de datos de HidroGest</text>
+<text x="701" y="582" text-anchor="middle" font-size="13">tb_clientes · tb_contadores · tb_lecturas · tb_pagos · tb_periodos · tb_tarifas · tb_usuarios</text>
+<path d="M553 86 L553 130" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<path d="M553 226 L553 530" fill="none" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)" marker-start="url(#a)"/>
+<text x="559" y="300" text-anchor="start" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">lee y escribe</text>
+<text x="559" y="314" text-anchor="start" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">(Eloquent)</text>
+<path d="M410 312 L410 530" fill="none" stroke="#37474f" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="404" y="450" text-anchor="end" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">solo lectura</text>
+<text x="404" y="464" text-anchor="end" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">(usuario hydro_ro)</text>
+<path d="M676 176 L657 176 L657 530" fill="none" stroke="#37474f" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="651" y="505" text-anchor="end" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">JDBC · solo SELECT</text>
+<path d="M1142 222 L1142 530" fill="none" stroke="#37474f" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="1136" y="430" text-anchor="end" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">lee por</text>
+<text x="1136" y="444" text-anchor="end" font-size="11.5" fill="#263238" paint-order="stroke" stroke="#ffffff" stroke-width="4">updated_at</text>
+<text x="250" y="658" font-size="13" font-weight="700">Leyenda</text>
+<path d="M320 654 L370 654" stroke="#37474f" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="378" y="658" font-size="12.5">llamada HTTP / escritura</text>
+<path d="M550 654 L600 654" stroke="#37474f" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="608" y="658" font-size="12.5">lectura de la BD de HidroGest (sin escribir)</text>
+<rect x="890" y="644" width="40" height="20" rx="4" fill="#fafafa" stroke="#757575" stroke-dasharray="6 4"/>
+<text x="938" y="658" font-size="12.5">sistema externo</text>
+<text x="250" y="688" font-size="12.5">Integración: las 4 features se acoplan al monolito solo a través de su base de datos (ninguna modifica el código de Laravel).</text>
+<text x="250" y="706" font-size="12.5">F1, F3 y F4 leen MariaDB; F2 usa su propia base de conocimiento. Cada repositorio se levanta con su propio docker compose.</text>
+<text x="250" y="724" font-size="12.5">Repos: HydroGest · Consulta_Captcha (fase2/) · hydrogest-chatbot · hidrogest-pagos-sender · hidrogest-sync-service</text>
+</svg>
