@@ -20,6 +20,16 @@ completa `adminPassword` (`ADMIN_PASSWORD`), `bankApiKey`, `erpApiKey` y `thirdA
 tu `.env`, y selecciónalo arriba a la derecha. Esos valores quedan solo en tu Postman: **no** vuelvas
 a exportar el entorno al repo.
 
+Carpetas extra de la colección: **5** casos negativos (401, 404, 400, 409, 403; no crean pagos),
+**6** reglas de idempotencia contra el mock del tercero y **7** las mismas reglas contra el **banco
+real** (cada corrida registra un pago demo de Q1.50 con llave `EQA-DEMO-<timestamp>`). En el banco
+real, la misma llave con otro monto responde `DUPLICATE_PAYMENT` (no `IDEMPOTENCY_KEY_REUSED`) y
+un monto mayor a Q25,000 se acepta: por eso pagos-sender compara el monto (ADR-0007) y valida el
+límite antes de llamar.
+
+> El mock del tercero guarda en memoria: si se reinicia, la carpeta 3 da 404 en *Tercero* para pagos
+> anteriores. Para la demo usa siempre un cobro nuevo.
+
 **Levantar el entorno** (única vez que se usa la terminal):
 
 ```bash
@@ -43,13 +53,13 @@ Para ver los datos: **tb_pagos → Seleccionar datos** (están el monto, el mét
 
 ## Prueba 1 · Flujo completo
 
-1. **Adminer:** `simular_nuevo_cobro(120.50, Efectivo, 1)` → anota el `pago_id` (ej. `900011`).
+1. **Adminer:** `simular_nuevo_cobro(120.50, Efectivo, 1)` → anota el `pago_id` (ej. `1793143394000`; cada instalación tiene su propio rango).
 2. Espera ~10 s.
 3. **DynamoDB Admin → pagos_entregas:** aparecen 3 filas con ese `paymentId` (BANCO, ERP, TERCERO)
    con `estado = ENTREGADO` y su `receiptId` (`BNK-…`, `ERP-…`, `THR-…`).
 4. **DynamoDB Admin → pagos_intentos:** una fila por llamada (`operacion = SEND`, `httpStatus = 201`,
    `duracionMs`).
-5. **Postman:** en el entorno pon `pagoId = 900011`. Ejecuta la carpeta **2. Estado de un pago →
+5. **Postman:** en el entorno pon `pagoId` = ese id. Ejecuta la carpeta **2. Estado de un pago →
    Estado del pago** y luego la carpeta **3. Verificación directa en los destinos**.
    Clic derecho en la colección → *Run* para ejecutar todo de una vez.
 

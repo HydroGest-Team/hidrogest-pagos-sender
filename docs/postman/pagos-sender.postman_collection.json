@@ -508,6 +508,1109 @@
           }
         }
       ]
+    },
+    {
+      "name": "5. Seguridad y casos negativos",
+      "description": "Lo que el servicio y los destinos deben RECHAZAR. No crea pagos en ningún sistema.",
+      "item": [
+        {
+          "name": "Admin sin credenciales → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "/admin exige Basic Auth del usuario admin.",
+            "url": {
+              "raw": "{{baseUrl}}/admin/pagos/{{pagoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "pagos",
+                "{{pagoId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Admin contraseña incorrecta → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/pagos/{{pagoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "pagos",
+                "{{pagoId}}"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{adminUser}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "contraseña-incorrecta",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Métricas sin credenciales → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Solo /actuator/health es público.",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/prometheus",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "prometheus"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Pago inexistente → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Un id que nunca se cobró no tiene entregas.",
+            "url": {
+              "raw": "{{baseUrl}}/admin/pagos/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "pagos",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Destino inválido → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "Solo existen BANCO, ERP y TERCERO.",
+            "url": {
+              "raw": "{{baseUrl}}/admin/pagos/{{pagoId}}/destinos/PAYPAL/reencolar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "pagos",
+                "{{pagoId}}",
+                "destinos",
+                "PAYPAL",
+                "reencolar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reencolar algo que no está en DEAD_LETTER → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "description": "El reencolado manual solo aplica a entregas en DEAD_LETTER.",
+            "url": {
+              "raw": "{{baseUrl}}/admin/pagos/1/destinos/BANCO/reencolar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "pagos",
+                "1",
+                "destinos",
+                "BANCO",
+                "reencolar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Banco sin API key → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rechazado sin x-api-key\", () => pm.expect(pm.response.code).to.be.oneOf([401, 403]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/payments/{{llave}}",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "payments",
+                "{{llave}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Banco: llave que no existe → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bankApiKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/payments/NOEXISTE-00000000",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "payments",
+                "NOEXISTE-00000000"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "ERP: documento que no existe → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{erpApiKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{erpBaseUrl}}/erp/v1/pagos/NOEXISTE-00000000",
+              "host": [
+                "{{erpBaseUrl}}"
+              ],
+              "path": [
+                "erp",
+                "v1",
+                "pagos",
+                "NOEXISTE-00000000"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Tercero sin API key → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments/{{llave}}",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments",
+                "{{llave}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Idempotencia y errores (mock del tercero)",
+      "description": "Demuestra las reglas del contrato llamando DIRECTO al mock local (no toca los simuladores del docente). Ejecutar en orden: la primera petición genera una llave DEMO-<timestamp> nueva cada vez.",
+      "item": [
+        {
+          "name": "6.1 Enviar pago nuevo → 201",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Llave nueva en cada corrida, fecha de pago = ahora",
+                  "pm.collectionVariables.set('llaveDemo', 'DEMO-' + Date.now());",
+                  "pm.collectionVariables.set('paidAtDemo', new Date().toISOString().replace(/\\.\\d{3}Z$/, 'Z'));",
+                  "pm.collectionVariables.set('periodoDemo', new Date().toISOString().slice(0, 7));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set(\"confirmacionDemo\", r.confirmationId);",
+                  "pm.test(\"comprobante THR-…\", () => pm.expect(r.confirmationId).to.match(/^THR-/));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{thirdApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveDemo}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"reference\": \"DEMO-POSTMAN\",\n  \"customer\": {\n    \"code\": \"CLI-DEMO\"\n  },\n  \"amount\": \"150.75\",\n  \"currency\": \"GTQ\",\n  \"paidAt\": \"{{paidAtDemo}}\",\n  \"method\": \"CASH\",\n  \"period\": \"{{periodoDemo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "6.2 Reenviar el MISMO pago → 409 DUPLICATE_PAYMENT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "const r = pm.response.json();",
+                  "pm.test(\"DUPLICATE_PAYMENT\", () => pm.expect(r.code).to.eql(\"DUPLICATE_PAYMENT\"));",
+                  "pm.test(\"mismo comprobante original\", () => pm.expect(r.originalConfirmation.confirmationId).to.eql(pm.collectionVariables.get(\"confirmacionDemo\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{thirdApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveDemo}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "description": "Misma llave y mismos datos: el destino no lo registra dos veces y devuelve el comprobante original. Para pagos-sender esto es \"ya entregado\".",
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"reference\": \"DEMO-POSTMAN\",\n  \"customer\": {\n    \"code\": \"CLI-DEMO\"\n  },\n  \"amount\": \"150.75\",\n  \"currency\": \"GTQ\",\n  \"paidAt\": \"{{paidAtDemo}}\",\n  \"method\": \"CASH\",\n  \"period\": \"{{periodoDemo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "6.3 Misma llave con otro monto → 409 IDEMPOTENCY_KEY_REUSED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"IDEMPOTENCY_KEY_REUSED\", () => pm.expect(pm.response.json().code).to.eql(\"IDEMPOTENCY_KEY_REUSED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{thirdApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveDemo}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "description": "Error del productor: va a dead-letter y no se reintenta (ADR-0007).",
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"reference\": \"DEMO-POSTMAN\",\n  \"customer\": {\n    \"code\": \"CLI-DEMO\"\n  },\n  \"amount\": \"999.99\",\n  \"currency\": \"GTQ\",\n  \"paidAt\": \"{{paidAtDemo}}\",\n  \"method\": \"CASH\",\n  \"period\": \"{{periodoDemo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "6.4 Consultar por llave → 200 (lookup tras timeout)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"mismo comprobante\", () => pm.expect(pm.response.json().confirmationId).to.eql(pm.collectionVariables.get(\"confirmacionDemo\")));",
+                  "pm.test(\"monto original intacto\", () => pm.expect(pm.response.json().amount).to.eql(\"150.75\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{thirdApiKey}}",
+                "type": "text"
+              }
+            ],
+            "description": "Es lo que hace pagos-sender después de un timeout antes de reenviar (ADR-0004).",
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments/{{llaveDemo}}",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments",
+                "{{llaveDemo}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "6.5 Monto mayor a Q25,000 → 422 (no reintentable)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"AMOUNT_LIMIT_EXCEEDED\", () => pm.expect(pm.response.json().code).to.eql(\"AMOUNT_LIMIT_EXCEEDED\"));",
+                  "pm.test(\"retryable = false\", () => pm.expect(pm.response.json().retryable).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{thirdApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveDemo}}-LIM",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"reference\": \"DEMO-POSTMAN\",\n  \"customer\": {\n    \"code\": \"CLI-DEMO\"\n  },\n  \"amount\": \"30000.00\",\n  \"currency\": \"GTQ\",\n  \"paidAt\": \"{{paidAtDemo}}\",\n  \"method\": \"CASH\",\n  \"period\": \"{{periodoDemo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "6.6 Falla transitoria forzada → 503 (reintentable)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 503\", () => pm.response.to.have.status(503));",
+                  "pm.test(\"retryable = true\", () => pm.expect(pm.response.json().retryable).to.eql(true));",
+                  "pm.test(\"trae Retry-After\", () => pm.response.to.have.header(\"Retry-After\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{thirdApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveDemo}}-503",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Simulation-Scenario",
+                "value": "ERROR_503",
+                "type": "text"
+              }
+            ],
+            "description": "Con el header X-Simulation-Scenario se fuerza el fallo. pagos-sender lo manda a la cola de reintento con backoff.",
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"reference\": \"DEMO-POSTMAN\",\n  \"customer\": {\n    \"code\": \"CLI-DEMO\"\n  },\n  \"amount\": \"10.00\",\n  \"currency\": \"GTQ\",\n  \"paidAt\": \"{{paidAtDemo}}\",\n  \"method\": \"CASH\",\n  \"period\": \"{{periodoDemo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "6.7 Body inválido → 400 VALIDATION_ERROR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{thirdApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveDemo}}-BAD",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "description": "El monto debe ir como texto con 2 decimales.",
+            "url": {
+              "raw": "{{thirdBaseUrl}}/third/v1/payments",
+              "host": [
+                "{{thirdBaseUrl}}"
+              ],
+              "path": [
+                "third",
+                "v1",
+                "payments"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"reference\": \"DEMO-POSTMAN\",\n  \"customer\": {\n    \"code\": \"CLI-DEMO\"\n  },\n  \"amount\": \"150.7\",\n  \"currency\": \"GTQ\",\n  \"paidAt\": \"{{paidAtDemo}}\",\n  \"method\": \"CASH\",\n  \"period\": \"{{periodoDemo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Idempotencia en el BANCO REAL (docente)",
+      "description": "Las mismas reglas de la carpeta 6, pero contra el simulador real del banco en AWS. Cada corrida registra UN pago de demostración (Q1.50) con una llave nueva <prefijo>DEMO-<timestamp>, distinta de las llaves de HidroGest. Ejecutar en orden. El caso de monto > Q25,000 no se manda aquí: el simulador real lo acepta (fuera de contrato) y pagos-sender lo rechaza antes de llamar (VALIDACION_LOCAL, ver Prueba 4 de PRUEBAS-GRAFICAS.md).",
+      "item": [
+        {
+          "name": "7.1 Enviar pago nuevo → 201",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('llaveBancoDemo', (pm.variables.get('llavePrefijo') || 'EQA-') + 'DEMO-' + Date.now());",
+                  "pm.collectionVariables.set('fechaBancoDemo', new Date().toISOString().replace(/\\.\\d{3}Z$/, 'Z'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set(\"comprobanteBancoDemo\", r.receiptId);",
+                  "pm.test(\"comprobante BNK-…\", () => pm.expect(r.receiptId).to.match(/^BNK-/));",
+                  "pm.test(\"monto en centavos\", () => pm.expect(r.amount.valueInCents).to.eql(150));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Q1.50 se envía como 150 centavos.",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bankApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveBancoDemo}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Simulation-Scenario",
+                "value": "SUCCESS",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"payer\": {\n    \"customerCode\": \"CLI-DEMO-POSTMAN\",\n    \"taxId\": \"CF\"\n  },\n  \"amount\": {\n    \"valueInCents\": 150,\n    \"currency\": \"GTQ\"\n  },\n  \"transactionDate\": \"{{fechaBancoDemo}}\",\n  \"channel\": \"CASH\",\n  \"description\": \"Demo Postman presentacion\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/payments",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.2 Reenviar el MISMO pago → 409 DUPLICATE_PAYMENT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "const r = pm.response.json();",
+                  "pm.test(\"DUPLICATE_PAYMENT\", () => pm.expect(r.code).to.eql(\"DUPLICATE_PAYMENT\"));",
+                  "pm.test(\"mismo comprobante original\", () => pm.expect(r.originalReceipt.receiptId).to.eql(pm.collectionVariables.get(\"comprobanteBancoDemo\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "El banco no lo registra dos veces: devuelve el comprobante original (pagos-sender lo toma como entregado).",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bankApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveBancoDemo}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Simulation-Scenario",
+                "value": "SUCCESS",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"payer\": {\n    \"customerCode\": \"CLI-DEMO-POSTMAN\",\n    \"taxId\": \"CF\"\n  },\n  \"amount\": {\n    \"valueInCents\": 150,\n    \"currency\": \"GTQ\"\n  },\n  \"transactionDate\": \"{{fechaBancoDemo}}\",\n  \"channel\": \"CASH\",\n  \"description\": \"Demo Postman presentacion\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/payments",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.3 Misma llave con otro monto → 409 (el monto no coincide)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "const r = pm.response.json();",
+                  "console.log(\"code del banco:\", r.code);",
+                  "pm.test(\"rechaza el reuso de la llave\", () => pm.expect(r.code).to.be.oneOf([\"IDEMPOTENCY_KEY_REUSED\", \"DUPLICATE_PAYMENT\"]));",
+                  "if (r.code === \"DUPLICATE_PAYMENT\") {",
+                  "  pm.test(\"el monto registrado (150) NO es el enviado (99999): pagos-sender lo detecta (ADR-0007)\", () => pm.expect(r.originalReceipt.amount.valueInCents).to.eql(150));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Contrato: IDEMPOTENCY_KEY_REUSED. El simulador real responde DUPLICATE_PAYMENT con el comprobante del pago ORIGINAL (150 centavos). Por eso pagos-sender compara el monto y, si difiere, lo manda a DEAD_LETTER con LLAVE_REUTILIZADA en lugar de darlo por entregado (ADR-0007).",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bankApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveBancoDemo}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Simulation-Scenario",
+                "value": "SUCCESS",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"payer\": {\n    \"customerCode\": \"CLI-DEMO-POSTMAN\",\n    \"taxId\": \"CF\"\n  },\n  \"amount\": {\n    \"valueInCents\": 99999,\n    \"currency\": \"GTQ\"\n  },\n  \"transactionDate\": \"{{fechaBancoDemo}}\",\n  \"channel\": \"CASH\",\n  \"description\": \"Demo Postman presentacion\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/payments",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.4 Consultar por llave → 200 (un solo registro)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test(\"mismo comprobante\", () => pm.expect(r.receiptId).to.eql(pm.collectionVariables.get(\"comprobanteBancoDemo\")));",
+                  "pm.test(\"monto original intacto (150)\", () => pm.expect(r.amount.valueInCents).to.eql(150));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bankApiKey}}",
+                "type": "text"
+              }
+            ],
+            "description": "Lo que hace pagos-sender tras un timeout antes de reenviar (ADR-0004).",
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/payments/{{llaveBancoDemo}}",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "payments",
+                "{{llaveBancoDemo}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.5 Falla transitoria forzada → 503 (reintentable)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 503\", () => pm.response.to.have.status(503));",
+                  "pm.test(\"retryable = true\", () => pm.expect(pm.response.json().retryable).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Con X-Simulation-Scenario el banco real falla a propósito; pagos-sender lo manda a reintento con backoff.",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bankApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{llaveBancoDemo}}-503",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Simulation-Scenario",
+                "value": "ERROR_503",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamCode\": \"{{teamCode}}\",\n  \"payer\": {\n    \"customerCode\": \"CLI-DEMO-POSTMAN\",\n    \"taxId\": \"CF\"\n  },\n  \"amount\": {\n    \"valueInCents\": 150,\n    \"currency\": \"GTQ\"\n  },\n  \"transactionDate\": \"{{fechaBancoDemo}}\",\n  \"channel\": \"CASH\",\n  \"description\": \"Demo Postman presentacion\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{bankBaseUrl}}/bank/v1/payments",
+              "host": [
+                "{{bankBaseUrl}}"
+              ],
+              "path": [
+                "bank",
+                "v1",
+                "payments"
+              ]
+            }
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -521,6 +1624,34 @@
     },
     {
       "key": "comprobante_TERCERO",
+      "value": ""
+    },
+    {
+      "key": "llaveDemo",
+      "value": ""
+    },
+    {
+      "key": "paidAtDemo",
+      "value": ""
+    },
+    {
+      "key": "periodoDemo",
+      "value": ""
+    },
+    {
+      "key": "confirmacionDemo",
+      "value": ""
+    },
+    {
+      "key": "llaveBancoDemo",
+      "value": ""
+    },
+    {
+      "key": "fechaBancoDemo",
+      "value": ""
+    },
+    {
+      "key": "comprobanteBancoDemo",
       "value": ""
     }
   ]

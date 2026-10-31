@@ -11,6 +11,7 @@ import gt.edu.umg.desarrolloweb.pagos.domain.Payment;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 
+import java.math.BigDecimal;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
 import java.net.SocketTimeoutException;
@@ -39,8 +40,15 @@ public abstract class HttpDestinationGateway implements DestinationGateway {
     /** Envía el pago y devuelve el comprobante. Lanza {@link DestinationHttpException} si no es 2xx. */
     protected abstract String doSend(Payment payment, String idempotencyKey);
 
-    /** Consulta por llave y devuelve el comprobante. Lanza {@link DestinationHttpException} si no es 2xx. */
-    protected abstract String doLookup(String idempotencyKey);
+    /** Consulta por llave y devuelve lo registrado. Lanza {@link DestinationHttpException} si no es 2xx. */
+    protected abstract Registro doLookup(String idempotencyKey);
+
+    /**
+     * Lo que el destino tiene registrado con una llave.
+     *
+     * @param monto monto registrado en quetzales, o {@code null} si la respuesta no lo trae
+     */
+    public record Registro(String receiptId, BigDecimal monto) {}
 
     protected abstract boolean doHealth();
 
@@ -65,8 +73,12 @@ public abstract class HttpDestinationGateway implements DestinationGateway {
             result = DeliveryResult.delivered(201, null, doSend(payment, idempotencyKey));
         } catch (DestinationHttpException e) {
             Outcome outcome = ResponseClassifier.classify(e.status(), e.code());
-            String receipt = outcome == Outcome.DELIVERED ? e.originalReceiptId() : null;
-            result = new DeliveryResult(outcome, e.status(), e.code(), receipt, e.retryAfter(), null);
+            if (outcome == Outcome.DELIVERED && !mismoMonto(payment, e.originalAmount())) {
+                result = llaveReutilizada(e.status(), e.originalAmount());
+            } else {
+                String receipt = outcome == Outcome.DELIVERED ? e.originalReceiptId() : null;
+                result = new DeliveryResult(outcome, e.status(), e.code(), receipt, e.retryAfter(), null);
+            }
         } catch (IllegalArgumentException | ArithmeticException e) {
             // El pago no se pudo mapear al contrato (método no soportado, monto con más decimales...).
             breaker.releasePermission();
@@ -79,7 +91,7 @@ public abstract class HttpDestinationGateway implements DestinationGateway {
     }
 
     @Override
-    public LookupResult lookup(String idempotencyKey) {
+    public LookupResult lookup(Payment payment, String idempotencyKey) {
         if (!breaker.tryAcquirePermission()) {
             return new LookupResult.Failed(DeliveryResult.circuitOpen());
         }
@@ -87,8 +99,14 @@ public abstract class HttpDestinationGateway implements DestinationGateway {
         LookupResult lookup;
         DeliveryResult forBreaker;
         try {
-            lookup = new LookupResult.Found(doLookup(idempotencyKey));
-            forBreaker = DeliveryResult.delivered(200, null, null);
+            Registro registro = doLookup(idempotencyKey);
+            if (mismoMonto(payment, registro.monto())) {
+                lookup = new LookupResult.Found(registro.receiptId());
+                forBreaker = DeliveryResult.delivered(200, null, null);
+            } else {
+                forBreaker = llaveReutilizada(200, registro.monto());
+                lookup = new LookupResult.Failed(forBreaker);
+            }
         } catch (DestinationHttpException e) {
             if (e.status() == 404) {
                 lookup = new LookupResult.NotFound();
@@ -119,6 +137,21 @@ public abstract class HttpDestinationGateway implements DestinationGateway {
 
     public CircuitBreaker.State circuitState() {
         return breaker.getState();
+    }
+
+    /**
+     * Un 409 duplicado o una consulta exitosa solo significan "entregado" si el destino tiene este
+     * mismo pago. Si la llave quedó registrada con otro monto (por ejemplo, otra réplica de HidroGest
+     * reutilizó el id), darlo por entregado dejaría al destino con un pago distinto.
+     * Sin monto en la respuesta no se puede comparar y se confía en el destino.
+     */
+    private static boolean mismoMonto(Payment payment, BigDecimal registrado) {
+        return registrado == null || registrado.compareTo(payment.monto()) == 0;
+    }
+
+    private static DeliveryResult llaveReutilizada(int httpStatus, BigDecimal registrado) {
+        return new DeliveryResult(Outcome.DEAD_LETTER, httpStatus, DeliveryResult.LLAVE_REUTILIZADA, null, null,
+                "el destino ya tiene esta llave con otro monto (" + registrado.toPlainString() + ")");
     }
 
     private void record(DeliveryResult result, long startNanos) {

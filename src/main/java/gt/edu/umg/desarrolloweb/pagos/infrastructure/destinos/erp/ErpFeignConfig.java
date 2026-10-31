@@ -25,7 +25,8 @@ class ErpFeignConfig {
 
     @Bean
     ErrorDecoder erpErrorDecoder(ObjectMapper mapper) {
-        return new ContractErrorDecoder(mapper, "codigo_error", "/comprobante_original/numero_comprobante");
+        return new ContractErrorDecoder(mapper, "codigo_error", "/comprobante_original/numero_comprobante",
+                "/comprobante_original/total", false);
     }
 
     @Bean

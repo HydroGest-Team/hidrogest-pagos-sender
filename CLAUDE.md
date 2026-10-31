@@ -99,7 +99,9 @@ El Banco y el ERP son los simuladores reales del docente (AWS); no van en el com
 - MariaDB local: `docker/mariadb/01-esquema-hidrogest.sql` (copiado de las migraciones de
   Laravel; si HidroGest cambia su esquema, actualizar aquí) y `02-datos-semilla.sql` (fechas fijas,
   pagos desde 900001: no cambiar datos de un pago ya enviado o los simuladores responden
-  `IDEMPOTENCY_KEY_REUSED`).
+  `IDEMPOTENCY_KEY_REUSED`). Los cobros simulados (`04-simulacion-cajera.sql`) usan ids de un
+  rango propio por instalación (`segundos unix × 1000`) para no repetir llaves en los
+  simuladores compartidos (ADR-0007).
 - Mock de la tercera API: `docker/third-mock/mock_third_api.py`.
 - ADRs: `docs/adr/` · Operación: `docs/RUNBOOK.md` · CI: `.github/workflows/ci.yml`.
 - `src/main/resources/db/migration/` existe vacío; no debe usarse contra HidroGest.

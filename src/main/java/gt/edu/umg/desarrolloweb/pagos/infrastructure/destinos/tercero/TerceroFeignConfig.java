@@ -25,7 +25,8 @@ class TerceroFeignConfig {
 
     @Bean
     ErrorDecoder terceroErrorDecoder(ObjectMapper mapper) {
-        return new ContractErrorDecoder(mapper, "code", "/originalConfirmation/confirmationId");
+        return new ContractErrorDecoder(mapper, "code", "/originalConfirmation/confirmationId",
+                "/originalConfirmation/amount", false);
     }
 
     @Bean

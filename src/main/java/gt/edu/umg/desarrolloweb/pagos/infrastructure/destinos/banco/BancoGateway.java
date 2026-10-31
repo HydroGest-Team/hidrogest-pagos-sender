@@ -3,8 +3,10 @@ package gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.banco;
 import gt.edu.umg.desarrolloweb.pagos.application.PagosProperties;
 import gt.edu.umg.desarrolloweb.pagos.domain.Destino;
 import gt.edu.umg.desarrolloweb.pagos.domain.Payment;
+import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.banco.dto.BankPaymentReceiptDto;
 import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.banco.dto.HealthStatusDto;
 import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.common.HttpDestinationGateway;
+import gt.edu.umg.desarrolloweb.pagos.infrastructure.destinos.common.Montos;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.stereotype.Component;
 
@@ -27,8 +29,10 @@ public class BancoGateway extends HttpDestinationGateway {
     }
 
     @Override
-    protected String doLookup(String idempotencyKey) {
-        return client.getBankPayment(idempotencyKey).getReceiptId();
+    protected Registro doLookup(String idempotencyKey) {
+        BankPaymentReceiptDto receipt = client.getBankPayment(idempotencyKey);
+        Long centavos = receipt.getAmount() == null ? null : receipt.getAmount().getValueInCents();
+        return new Registro(receipt.getReceiptId(), Montos.desdeCentavos(centavos));
     }
 
     @Override

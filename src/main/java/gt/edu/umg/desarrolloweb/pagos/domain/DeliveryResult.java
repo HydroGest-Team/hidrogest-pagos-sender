@@ -22,6 +22,8 @@ public record DeliveryResult(
     /** Código local: el circuit breaker del destino está abierto y no se hizo la llamada. */
     public static final String CIRCUITO_ABIERTO = "CIRCUITO_ABIERTO";
     public static final String VALIDACION_LOCAL = "VALIDACION_LOCAL";
+    /** Código local: el destino ya tiene la llave registrada con datos de otro pago. */
+    public static final String LLAVE_REUTILIZADA = "LLAVE_REUTILIZADA";
 
     public static DeliveryResult delivered(int httpStatus, String errorCode, String receiptId) {
         return new DeliveryResult(Outcome.DELIVERED, httpStatus, errorCode, receiptId, null, null);

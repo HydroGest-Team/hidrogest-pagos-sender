@@ -5,6 +5,19 @@
 -- pagos-sender NO los usa: su usuario solo tiene SELECT.
 -- =====================================================================
 
+-- Ids únicos por instalación. La llave de idempotencia es EQA-<id>, y los simuladores del docente
+-- son compartidos y recuerdan cada llave. Si los cobros simulados siguieran a la semilla (900007,
+-- 900008...), al recrear la réplica (docker compose down -v) o en la réplica de otro compañero
+-- se repetirían llaves ya usadas con otros datos (ADR-0007). Por eso los cobros simulados empiezan
+-- en <segundos unix de esta inicialización> × 1000: cada instalación tiene su propio rango
+-- (p. ej. 1761600000000, llave EQA-1761600000000). La semilla 900001-900006 no cambia.
+-- Solo se ejecuta al crear el volumen; la BD real de HidroGest no se toca.
+SET @base_ids_simulados = UNIX_TIMESTAMP() * 1000;
+SET @ddl = CONCAT('ALTER TABLE tb_pagos AUTO_INCREMENT = ', @base_ids_simulados);
+PREPARE ajustar_ids FROM @ddl;
+EXECUTE ajustar_ids;
+DEALLOCATE PREPARE ajustar_ids;
+
 DELIMITER //
 
 -- Registra un cobro nuevo. p_pagado = 1 lo deja PAGADO (se envía en ~10 s);
@@ -46,7 +59,9 @@ BEGIN
     VALUES (p_monto, CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-06:00'), p_metodo,
             IF(p_pagado, 'PAGADO', 'NO PAGADO'), v_lectura, 2, UTC_TIMESTAMP(), UTC_TIMESTAMP());
 
-    SELECT id AS pago_id, CONCAT('EQA-', LPAD(id, 6, '0')) AS llave_por_defecto, monto_pago, metodo_pago,
+    -- Igual que IdempotencyKeys (%06d): rellena hasta 6 dígitos sin recortar los ids más largos.
+    SELECT id AS pago_id, CONCAT('EQA-', LPAD(id, GREATEST(6, LENGTH(id)), '0')) AS llave_por_defecto,
+           monto_pago, metodo_pago,
            estado_pago, fecha_pago
       FROM tb_pagos WHERE id = LAST_INSERT_ID();
 END //

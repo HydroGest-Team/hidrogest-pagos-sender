@@ -6,7 +6,7 @@ docente en AWS) y una **tercera API** (contrato provisional). Usa productor/cons
 **RabbitMQ**, guarda el estado por destino en **DynamoDB** y reenvía **solo a los destinos que faltan**.
 
 Contexto completo y plan: [`docs/CONTEXTO_Y_PLAN_FEATURE3_PAGOS.md`](docs/CONTEXTO_Y_PLAN_FEATURE3_PAGOS.md) ·
-Operación: [`docs/RUNBOOK.md`](docs/RUNBOOK.md) · Decisiones: [`docs/adr/`](docs/adr/)
+Guía completa (qué, cómo, dónde y por qué): [`docs/GUIA-COMPLETA.md`](docs/GUIA-COMPLETA.md) · Operación: [`docs/RUNBOOK.md`](docs/RUNBOOK.md) · Decisiones: [`docs/adr/`](docs/adr/)
 
 ## Arquitectura
 
