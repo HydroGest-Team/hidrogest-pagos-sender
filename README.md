@@ -1,9 +1,6 @@
-Nombre: Melki Bladimir Ortiz Martinez
-
-Carnet: 0905-23-6329
-
-Repositorio: https://github.com/HydroGest-Team/hidrogest-pagos-sender
-
+Nombre: Melki Bladimir Ortiz Martinez  
+Carnet: 0905-23-6329  
+Repositorio: https://github.com/HydroGest-Team/hidrogest-pagos-sender  
 Modulo asignado: Envío de pagos a sistemas externos por colas.
 
 # pagos-sender · Feature 3: envío de pagos a sistemas externos por colas
@@ -20,12 +17,13 @@ Documentación de apoyo: [Guía completa](docs/GUIA-COMPLETA.md) (qué, cómo, d
 ## Contenido
 
 1. [Arquitectura de la solución integrada (Fase 2)](#1-arquitectura-de-la-solución-integrada-fase-2)
-2. [Mi módulo: envío de pagos por colas](#2-mi-módulo-envío-de-pagos-por-colas)
+2. [Mi módulo: envío de pagos a sistemas externos por colas](#2-mi-módulo-envío-de-pagos-a-sistemas-externos-por-colas)
    - [2.1 Funcionalidad y objetivo](#21-funcionalidad-y-objetivo)
    - [2.2 Integración y responsabilidades](#22-integración-y-responsabilidades)
-   - [2.3 Decisiones técnicas](#23-decisiones-técnicas)
-   - [2.4 Cómo probar el módulo](#24-cómo-probar-el-módulo)
-3. [Referencia: configuración, build y pruebas automáticas](#3-referencia-configuración-build-y-pruebas-automáticas)
+   - [2.3 Decisión técnica](#23-decisión-técnica)
+   - [2.4 Instrucciones para probar el módulo](#24-instrucciones-para-probar-el-módulo)
+3. [Uso de IA en esta documentación](#3-uso-de-ia-en-esta-documentación)
+4. [Referencia: configuración, build y pruebas automáticas](#4-referencia-configuración-build-y-pruebas-automáticas)
 
 ---
 
@@ -51,6 +49,31 @@ datos de HidroGest**.
 | **F3 · Envío de pagos por colas** (este repositorio) | [hidrogest-pagos-sender](https://github.com/HydroGest-Team/hidrogest-pagos-sender) | Spring Boot, RabbitMQ, DynamoDB, OpenFeign, Resilience4j | Envía cada pago cobrado al Banco, al ERP y a la tercera API, con reintentos, dead-letter y reconciliación. Detalle en la sección 2. |
 | **F4 · Replicación asíncrona a NoSQL** | [hidrogest-sync-service](https://github.com/HydroGest-Team/hidrogest-sync-service) | Spring Boot, MongoDB 7 | `POST /sync` lanza una sincronización en segundo plano que copia a MongoDB (`hidrogest_replica`) los registros nuevos o modificados (por `updated_at`) de 6 tablas, con *upsert* y sin borrar nunca. `GET /sync/{jobId}` muestra el avance. |
 | **Sistemas externos** | — | — | Simuladores del **Banco** y del **ERP** del docente (AWS API Gateway), **Google reCAPTCHA** (F1), **Google Gemini** (F2). |
+
+### Qué representa cada conexión del diagrama
+
+| Conexión | Tipo | Qué representa |
+|---|---|---|
+| Cajera → HidroGest | HTTP (navegador) | La cajera usa el sistema web de Laravel para registrar lecturas y cobrar pagos. |
+| HidroGest ↔ MariaDB | Lectura y escritura (Eloquent) | El monolito es el **único** que escribe en su base de datos. |
+| Ciudadano → Next.js web-publica | HTTP (navegador) | Página pública donde se ingresa el código de contador y se resuelve el captcha. |
+| web-publica → Google reCAPTCHA | HTTPS (`siteverify`) | El BFF valida el captcha en el servidor, con la clave secreta que nunca llega al navegador. |
+| web-publica → consulta-service | HTTP | Si el captcha es válido, el BFF pide el estado de cuenta al microservicio. |
+| consulta-service → MariaDB | Solo lectura (JPA, usuario `hydro_ro`) | Lee clientes, contadores, lecturas y pagos, y devuelve los datos enmascarados. |
+| Usuario → Next.js + BFF (chatbot) | HTTP (navegador) | Interfaz de chat. |
+| BFF → chatbot-service | HTTP + header `X-API-Key` | El BFF agrega la llave del servicio en el servidor y reenvía la pregunta. |
+| chatbot-service → PostgreSQL + pgvector | SQL | Búsqueda por similitud de los fragmentos (*chunks*) más parecidos a la pregunta. |
+| chatbot-service → DynamoDB | AWS SDK | Guarda el historial de cada conversación. |
+| chatbot-service → Gemini | HTTPS | Genera los *embeddings* y la respuesta a partir de los fragmentos encontrados. |
+| chatbot-service → `conocimiento/*.md` | Archivos | Documentos que se convierten en *embeddings* al ejecutar la ingesta. |
+| **pagos-sender → MariaDB** | **Solo lectura (JDBC, solo `SELECT`)** | **El producer detecta los pagos `PAGADO` y el consumer lee los datos de cada pago.** |
+| **pagos-sender ↔ RabbitMQ** | **AMQP** | **Publica y consume un mensaje por (pago, destino); reintentos en colas con TTL y dead-letter.** |
+| **pagos-sender ↔ DynamoDB** | **AWS SDK v2** | **Estado de cada entrega por destino, bitácora de intentos y cursor del producer.** |
+| **pagos-sender → Banco / ERP / Tercera API** | **HTTPS, `x-api-key`, `Idempotency-Key`** | **Envío del pago con llave estable; consulta (`GET`) por la llave después de un timeout.** |
+| Operador → pagos-sender | HTTP + Basic Auth | Estado de un pago, reencolado manual de dead-letter y métricas. |
+| Operador → sync-service | HTTP (Swagger UI) | `POST /sync` inicia la réplica y `GET /sync/{jobId}` muestra el avance. |
+| sync-service → MariaDB | Solo lectura (JDBC) | Lee las filas nuevas o modificadas desde la última sincronización (`updated_at`). |
+| sync-service → MongoDB | Escritura (*upsert*) | Inserta o actualiza cada registro en `hidrogest_replica`, sin borrar. |
 
 ### Integración entre componentes
 
@@ -84,7 +107,7 @@ en una misma máquina hay que cambiar uno de esos puertos.
 
 ---
 
-## 2. Mi módulo: envío de pagos por colas
+## 2. Mi módulo: envío de pagos a sistemas externos por colas
 
 ### 2.1 Funcionalidad y objetivo
 
@@ -160,9 +183,9 @@ Otras responsabilidades que se respetan:
   `infrastructure/` (`mariadb`, `dynamodb`, `rabbit`, `destinos/{banco,erp,tercero}`, `admin`,
   `config`). El orquestador no conoce ninguna API en particular: habla con `DestinationGateway`.
 
-### 2.3 Decisiones técnicas
+### 2.3 Decisión técnica
 
-**Decisión principal: una entrega y un mensaje por (pago, destino), con el estado en DynamoDB y los
+**Decisión: una entrega y un mensaje por (pago, destino), con el estado en DynamoDB y los
 reintentos en colas de espera de RabbitMQ.**
 ([ADR-0002](docs/adr/0002-estado-en-dynamodb-hidrogest-solo-lectura.md),
 [ADR-0003](docs/adr/0003-reintentos-con-colas-ttl.md))
@@ -183,6 +206,12 @@ Con la decisión tomada:
   `ack` solo después de persistir. Si el servicio cae entre el `201` y el guardado, el reenvío recibe
   `409 duplicado` y se toma como entregado.
 
+**Relación con los requisitos:** el requisito central es que cada pago llegue a 3 APIs, que
+cualquiera puede fallar sin aviso, y que se reenvíe **solo a la que falta**. Guardar el estado por
+destino es lo que permite saber cuál falta. El mensaje por destino es lo que permite reenviar solo a
+ese. DynamoDB y RabbitMQ son las tecnologías que pide la arquitectura de la clase (sin Lambdas y sin
+SQS).
+
 **Otras decisiones** documentadas como ADR:
 
 - **Timeout = "desconocido":** antes de reenviar se consulta al destino con `GET` por la llave, porque
@@ -195,10 +224,16 @@ Con la decisión tomada:
   (`tb_periodos.fecha_apertura`), el mismo valor que reciben el banco y el tercero
   ([ADR-0005](docs/adr/0005-periodo-fiscal-erp.md)).
 
-### 2.4 Cómo probar el módulo
+### 2.4 Instrucciones para probar el módulo
 
-**Requisitos:** Docker Desktop y acceso a internet, porque el Banco y el ERP son los simuladores del
-docente en AWS. Para compilar sin Docker: JDK 17 y Maven 3.9+.
+**Requisitos previos:** Docker Desktop y acceso a internet, porque el Banco y el ERP son los
+simuladores del docente en AWS. Para compilar sin Docker: JDK 17 y Maven 3.9+.
+
+**Datos de prueba:** no hace falta la BD real de HidroGest. `docker compose` crea una **réplica
+local** con el esquema del monolito y datos semilla ficticios: clientes de prueba y los pagos
+`900001`–`900005`, que se envían solos al arrancar. Los cobros nuevos se crean con las rutinas
+`simular_nuevo_cobro` y `simular_cobro_tardio`, que imitan a la cajera. Ningún dato es de una
+persona real.
 
 **1. Configurar y levantar** (desde la raíz del repositorio):
 
@@ -255,7 +290,28 @@ integración).
 
 ---
 
-## 3. Referencia: configuración, build y pruebas automáticas
+## 3. Uso de IA en esta documentación
+
+La arquitectura de la solución integrada y este README se redactaron con ayuda de **Claude Code**
+(Anthropic). Se le pidió revisar el código fuente y los archivos de configuración de los cinco
+repositorios del equipo (`docker-compose.yml`, `application.properties`/`.yml`, controladores, rutas
+del BFF de Next.js y migraciones) para describir la arquitectura **real**, no la del enunciado.
+
+Lo que se revisó y corrigió frente al código antes de publicar:
+
+- El monolito es **Laravel 11**, no CodeIgniter.
+- **No existe** un `docker-compose` único para toda la solución: se documentó el procedimiento real
+  de cada repositorio.
+- El chatbot (F2) **no** lee la BD de HidroGest: usa su propia base de conocimiento. El diagrama no
+  dibuja esa conexión.
+- La réplica de F4 no usa colas: es un hilo en segundo plano dentro del servicio.
+- El período fiscal del ERP se describió primero como "mes del pago"; se corrigió con lo que dice
+  [ADR-0005](docs/adr/0005-periodo-fiscal-erp.md).
+- Se comprobó que ni el README ni el historial de Git contienen contraseñas, API keys ni el `.env`.
+
+---
+
+## 4. Referencia: configuración, build y pruebas automáticas
 
 ### Build y pruebas
 
